@@ -569,6 +569,7 @@
 -rtc_base/copy_on_write_buffer_unittest.cc
 -rtc_base/cpu_info.cc
 -rtc_base/crc32.cc
+-rtc_base/crypt_string.cc
 -rtc_base/crypto_random.cc
 -rtc_base/event_tracer.cc
 -rtc_base/experiments/field_trial_list.h
