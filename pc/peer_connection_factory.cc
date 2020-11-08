@@ -266,6 +266,10 @@ PeerConnectionFactory::CreatePeerConnection(
     });
   }
 
+  if (dependencies.allocator) {
+    dependencies.allocator->set_proxy("", configuration.proxy_info);
+  }
+
   if (!dependencies.async_resolver_factory) {
     dependencies.async_resolver_factory =
         std::make_unique<webrtc::BasicAsyncResolverFactory>();
