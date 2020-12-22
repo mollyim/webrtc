@@ -2169,6 +2169,15 @@ PeerConnection::InitializePortAllocator_n(
     RTC_LOG(LS_INFO) << "TCP candidates are disabled.";
   }
 
+  if (configuration.proxy_info.type != rtc::PROXY_NONE) {
+    port_allocator_flags |= cricket::PORTALLOCATOR_DISABLE_UDP |
+                            cricket::PORTALLOCATOR_DISABLE_UDP_RELAY |
+                            cricket::PORTALLOCATOR_DISABLE_STUN |
+                            cricket::PORTALLOCATOR_DISABLE_ADAPTER_ENUMERATION |
+                            cricket::PORTALLOCATOR_DISABLE_DEFAULT_LOCAL_CANDIDATE;
+    RTC_LOG(LS_INFO) << "UDP candidates, relay over UDP, and STUN are disabled.";
+  }
+
   if (configuration.candidate_network_policy ==
       kCandidateNetworkPolicyLowCost) {
     port_allocator_flags |= cricket::PORTALLOCATOR_DISABLE_COSTLY_NETWORKS;
