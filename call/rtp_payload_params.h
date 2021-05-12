@@ -47,11 +47,11 @@ class RtpPayloadParams final {
 
  private:
   void SetCodecSpecific(RTPVideoHeader* rtp_video_header,
-                        bool first_frame_in_picture);
+                        bool first_frame_in_picture,
+                        int64_t shared_frame_id);
   RTPVideoHeader::GenericDescriptorInfo GenericDescriptorFromFrameInfo(
       const GenericFrameInfo& frame_info,
-      int64_t frame_id,
-      VideoFrameType frame_type);
+      int64_t frame_id);
   void SetGeneric(const CodecSpecificInfo* codec_specific_info,
                   int64_t frame_id,
                   bool is_keyframe,
