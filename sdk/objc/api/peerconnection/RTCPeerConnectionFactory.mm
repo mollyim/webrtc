@@ -58,6 +58,9 @@
 // API layer.
 #include "media/engine/webrtc_media_engine.h"  // nogncheck
 
+// RingRTC changes for low-level FFI
+#import "RTCMediaStreamTrack+Private.h"
+
 @implementation RTC_OBJC_TYPE (RTCPeerConnectionFactory) {
   std::unique_ptr<rtc::Thread> _networkThread;
   std::unique_ptr<rtc::Thread> _workerThread;
@@ -260,7 +263,9 @@
 - (RTC_OBJC_TYPE(RTCVideoTrack) *)videoTrackFromNativeTrack:(void *)nativeTrack {
   webrtc::MediaStreamTrackInterface *track = (webrtc::MediaStreamTrackInterface *)nativeTrack;
 
-  return [[RTC_OBJC_TYPE(RTCVideoTrack) alloc] initWithFactory:self nativeTrack:track];
+  return [[RTC_OBJC_TYPE(RTCVideoTrack) alloc] initWithFactory:self
+                                                   nativeTrack:track
+                                                          type:RTCMediaStreamTrackTypeVideo];
 }
 
 - (RTC_OBJC_TYPE(RTCPeerConnection) *)
@@ -336,6 +341,11 @@
 - (void)stopAecDump {
   _nativeFactory->StopAecDump();
   _hasStartedAecDump = NO;
+}
+
+// RingRTC changes for low-level FFI
+- (void *)getOwnedNativeFactory {
+  return self.nativeFactory.release();
 }
 
 @end
