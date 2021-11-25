@@ -12,12 +12,14 @@
 #define P2P_BASE_PORT_INTERFACE_H_
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/types/optional.h"
 #include "api/candidate.h"
 #include "p2p/base/transport_description.h"
 #include "rtc_base/async_packet_socket.h"
+#include "rtc_base/callback_list.h"
 #include "rtc_base/socket_address.h"
 
 namespace rtc {
@@ -110,12 +112,11 @@ class PortInterface {
                                         int error_code,
                                         const std::string& reason) = 0;
 
-  // Signaled when this port decides to delete itself because it no longer has
-  // any usefulness.
-  sigslot::signal1<PortInterface*> SignalDestroyed;
-
   // Signaled when Port discovers ice role conflict with the peer.
   sigslot::signal1<PortInterface*> SignalRoleConflict;
+
+  // RingRTC change to support ICE forking
+  sigslot::signal1<PortInterface*> SignalDestroyed;
 
   // Normally, packets arrive through a connection (or they result signaling of
   // unknown address).  Calling this method turns off delivery of packets
