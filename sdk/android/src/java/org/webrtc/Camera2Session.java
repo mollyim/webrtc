@@ -10,7 +10,6 @@
 
 package org.webrtc;
 
-import android.annotation.TargetApi;
 import android.content.Context;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -29,8 +28,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.webrtc.CameraEnumerationAndroid.CaptureFormat;
 
-// RingRTC change to keep support for SDK >= 19
-@TargetApi(21)
 class Camera2Session implements CameraSession {
   private static final String TAG = "Camera2Session";
 

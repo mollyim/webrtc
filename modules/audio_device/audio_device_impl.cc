@@ -12,12 +12,12 @@
 
 #include <stddef.h>
 
+#include "api/make_ref_counted.h"
 #include "api/scoped_refptr.h"
 #include "modules/audio_device/audio_device_config.h"  // IWYU pragma: keep
 #include "modules/audio_device/audio_device_generic.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
-#include "rtc_base/ref_counted_object.h"
 #include "system_wrappers/include/metrics.h"
 
 #if defined(_WIN32)
@@ -664,7 +664,6 @@ int32_t AudioDeviceModuleImpl::MinMicrophoneVolume(uint32_t* minVolume) const {
   return 0;
 }
 
-// RingRTC changes to add some useful logging
 int16_t AudioDeviceModuleImpl::PlayoutDevices() {
   RTC_LOG(LS_INFO) << __FUNCTION__;
   CHECKinitialized_();

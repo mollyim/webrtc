@@ -66,6 +66,10 @@ class RTC_EXPORT EncodedImageCallback {
   // kDroppedByMediaOptimizations - dropped by MediaOptimizations (for rate
   // limiting purposes).
   // kDroppedByEncoder - dropped by encoder's internal rate limiter.
+  // TODO(bugs.webrtc.org/10164): Delete this enum? It duplicates the more
+  // general VideoStreamEncoderObserver::DropReason. Also,
+  // kDroppedByMediaOptimizations is not produced by any encoder, but by
+  // VideoStreamEncoder.
   enum class DropReason : uint8_t {
     kDroppedByMediaOptimizations,
     kDroppedByEncoder
@@ -96,11 +100,9 @@ class RTC_EXPORT VideoEncoder {
     struct KOff {};
 
    public:
-    // TODO(nisse): Would be nicer if kOff were a constant ScalingSettings
-    // rather than a magic value. However, absl::optional is not trivially copy
-    // constructible, and hence a constant ScalingSettings needs a static
-    // initializer, which is strongly discouraged in Chrome. We can hopefully
-    // fix this when we switch to absl::optional or std::optional.
+    // TODO(bugs.webrtc.org/9078): Since absl::optional should be trivially copy
+    // constructible, this magic value can likely be replaced by a constexpr
+    // ScalingSettings value.
     static constexpr KOff kOff = {};
 
     ScalingSettings(int low, int high);
@@ -172,7 +174,7 @@ class RTC_EXPORT VideoEncoder {
     // For example: With I420, this value would be a multiple of 2.
     // Note that this field is unrelated to any horizontal or vertical stride
     // requirements the encoder has on the incoming video frame buffers.
-    int requested_resolution_alignment;
+    uint32_t requested_resolution_alignment;
 
     // Same as above but if true, each simulcast layer should also be divisible
     // by `requested_resolution_alignment`.

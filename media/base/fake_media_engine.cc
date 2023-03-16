@@ -427,7 +427,10 @@ void FakeVideoMediaChannel::SetRecordableEncodedFrameCallback(
 void FakeVideoMediaChannel::ClearRecordableEncodedFrameCallback(uint32_t ssrc) {
 }
 
-void FakeVideoMediaChannel::GenerateKeyFrame(uint32_t ssrc) {}
+void FakeVideoMediaChannel::RequestRecvKeyFrame(uint32_t ssrc) {}
+void FakeVideoMediaChannel::GenerateSendKeyFrame(
+    uint32_t ssrc,
+    const std::vector<std::string>& rids) {}
 
 FakeVoiceEngine::FakeVoiceEngine() : fail_create_channel_(false) {
   // Add a fake audio codec. Note that the name must not be "" as there are
@@ -527,11 +530,11 @@ void FakeVideoEngine::UnregisterChannel(VideoMediaChannel* channel) {
   RTC_DCHECK(it != channels_.end());
   channels_.erase(it);
 }
-std::vector<VideoCodec> FakeVideoEngine::send_codecs() const {
+std::vector<VideoCodec> FakeVideoEngine::send_codecs(bool use_rtx) const {
   return send_codecs_;
 }
 
-std::vector<VideoCodec> FakeVideoEngine::recv_codecs() const {
+std::vector<VideoCodec> FakeVideoEngine::recv_codecs(bool use_rtx) const {
   return recv_codecs_;
 }
 

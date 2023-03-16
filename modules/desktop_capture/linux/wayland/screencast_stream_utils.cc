@@ -27,18 +27,8 @@
 
 namespace webrtc {
 
-PipeWireThreadLoopLock::PipeWireThreadLoopLock(pw_thread_loop* loop)
-    : loop_(loop) {
-  pw_thread_loop_lock(loop_);
-}
-
-PipeWireThreadLoopLock::~PipeWireThreadLoopLock() {
-  pw_thread_loop_unlock(loop_);
-}
-
 PipeWireVersion PipeWireVersion::Parse(const absl::string_view& version) {
-  std::vector<std::string> parsed_version;
-  rtc::split(version, '.', &parsed_version);
+  std::vector<absl::string_view> parsed_version = rtc::split(version, '.');
 
   if (parsed_version.size() != 3) {
     return {};

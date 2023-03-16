@@ -10,6 +10,7 @@
 
 #include <queue>
 
+#include "absl/strings/string_view.h"
 #include "api/test/network_emulation/create_cross_traffic.h"
 #include "api/test/network_emulation/cross_traffic.h"
 #include "api/transport/goog_cc_factory.h"
@@ -138,10 +139,9 @@ absl::optional<DataRate> PacketTransmissionAndFeedbackBlock(
 
 // Scenarios:
 
-void UpdatesTargetRateBasedOnLinkCapacity(std::string test_name = "") {
-  ScopedFieldTrials trial("WebRTC-SendSideBwe-WithOverhead/Enabled/");
+void UpdatesTargetRateBasedOnLinkCapacity(absl::string_view test_name = "") {
   auto factory = CreateFeedbackOnlyFactory();
-  Scenario s("googcc_unit/target_capacity" + test_name, false);
+  Scenario s("googcc_unit/target_capacity" + std::string(test_name), false);
   CallClientConfig config;
   config.transport.cc_factory = &factory;
   config.transport.rates.min_rate = DataRate::KilobitsPerSec(10);
@@ -188,7 +188,7 @@ void UpdatesTargetRateBasedOnLinkCapacity(std::string test_name = "") {
   EXPECT_NEAR(client->target_rate().kbps(), 90, 25);
 }
 
-DataRate RunRembDipScenario(std::string test_name) {
+DataRate RunRembDipScenario(absl::string_view test_name) {
   Scenario s(test_name);
   NetworkSimulationConfig net_conf;
   net_conf.bandwidth = DataRate::KilobitsPerSec(2000);
@@ -236,7 +236,7 @@ class NetworkControllerTestFixture {
       int min_data_rate_kbps = 0,
       int max_data_rate_kbps = 5 * kInitialBitrateKbps) {
     NetworkControllerConfig config;
-    config.constraints.at_time = Timestamp::Millis(0);
+    config.constraints.at_time = Timestamp::Zero();
     config.constraints.min_data_rate =
         DataRate::KilobitsPerSec(min_data_rate_kbps);
     config.constraints.max_data_rate =
@@ -619,7 +619,7 @@ TEST(GoogCcScenario, LossBasedControlDoesModestBackoffToHighLoss) {
   EXPECT_GT(client->target_rate().kbps(), 100);
 }
 
-DataRate AverageBitrateAfterCrossInducedLoss(std::string name) {
+DataRate AverageBitrateAfterCrossInducedLoss(absl::string_view name) {
   Scenario s(name, false);
   NetworkSimulationConfig net_conf;
   net_conf.bandwidth = DataRate::KilobitsPerSec(1000);
@@ -654,7 +654,7 @@ DataRate AverageBitrateAfterCrossInducedLoss(std::string name) {
   // Querying the video stats from within the expected runtime environment
   // (i.e. the TQ that belongs to the CallClient, not the Scenario TQ that
   // we're currently on).
-  VideoReceiveStream::Stats video_receive_stats;
+  VideoReceiveStreamInterface::Stats video_receive_stats;
   auto* video_stream = video->receive();
   callee->SendTask([&video_stream, &video_receive_stats]() {
     video_receive_stats = video_stream->GetStats();
@@ -662,55 +662,6 @@ DataRate AverageBitrateAfterCrossInducedLoss(std::string name) {
   return DataSize::Bytes(
              video_receive_stats.rtp_stats.packet_counter.TotalBytes()) /
          s.TimeSinceStart();
-}
-
-TEST(GoogCcScenario, LossBasedRecoversFasterAfterCrossInducedLoss) {
-  // This test acts as a reference for the test below, showing that without the
-  // trial, we have worse behavior.
-  DataRate average_bitrate_without_loss_based =
-      AverageBitrateAfterCrossInducedLoss("googcc_unit/no_cross_loss_based");
-
-  // We recover bitrate better when subject to loss spikes from cross traffic
-  // when loss based controller is used.
-  ScopedFieldTrials trial("WebRTC-Bwe-LossBasedControl/Enabled/");
-  DataRate average_bitrate_with_loss_based =
-      AverageBitrateAfterCrossInducedLoss("googcc_unit/cross_loss_based");
-
-  EXPECT_GE(average_bitrate_with_loss_based,
-            average_bitrate_without_loss_based * 1.1);
-}
-
-TEST(GoogCcScenario, LossBasedEstimatorCapsRateAtModerateLoss) {
-  ScopedFieldTrials trial("WebRTC-Bwe-LossBasedControl/Enabled/");
-  Scenario s("googcc_unit/moderate_loss_channel", false);
-  CallClientConfig config;
-  config.transport.rates.min_rate = DataRate::KilobitsPerSec(10);
-  config.transport.rates.max_rate = DataRate::KilobitsPerSec(5000);
-  config.transport.rates.start_rate = DataRate::KilobitsPerSec(1000);
-
-  NetworkSimulationConfig network;
-  network.bandwidth = DataRate::KilobitsPerSec(2000);
-  network.delay = TimeDelta::Millis(100);
-  // 3% loss rate is in the moderate loss rate region at 2000 kbps, limiting the
-  // bitrate increase.
-  network.loss_rate = 0.03;
-  auto send_net = s.CreateMutableSimulationNode(network);
-  auto* client = s.CreateClient("send", std::move(config));
-  auto* route = s.CreateRoutes(client, {send_net->node()},
-                               s.CreateClient("return", CallClientConfig()),
-                               {s.CreateSimulationNode(network)});
-  s.CreateVideoStream(route->forward(), VideoStreamConfig());
-  // Allow the controller to stabilize at the lower bitrate.
-  s.RunFor(TimeDelta::Seconds(1));
-  // This increase in capacity would cause the target bitrate to increase to
-  // over 4000 kbps without LossBasedControl.
-  send_net->UpdateConfig([](NetworkSimulationConfig* c) {
-    c->bandwidth = DataRate::KilobitsPerSec(5000);
-  });
-  s.RunFor(TimeDelta::Seconds(20));
-  // Using LossBasedControl, the bitrate will not increase over 2500 kbps since
-  // we have detected moderate loss.
-  EXPECT_LT(client->target_rate().kbps(), 2500);
 }
 
 TEST(GoogCcScenario, MaintainsLowRateInSafeResetTrial) {
@@ -768,9 +719,7 @@ TEST(GoogCcScenario, CutsHighRateInSafeResetTrial) {
 }
 
 TEST(GoogCcScenario, DetectsHighRateInSafeResetTrial) {
-  ScopedFieldTrials trial(
-      "WebRTC-Bwe-SafeResetOnRouteChange/Enabled,ack/"
-      "WebRTC-SendSideBwe-WithOverhead/Enabled/");
+  ScopedFieldTrials trial("WebRTC-Bwe-SafeResetOnRouteChange/Enabled,ack/");
   const DataRate kInitialLinkCapacity = DataRate::KilobitsPerSec(200);
   const DataRate kNewLinkCapacity = DataRate::KilobitsPerSec(800);
   const DataRate kStartRate = DataRate::KilobitsPerSec(300);
@@ -946,11 +895,39 @@ TEST(GoogCcScenario, FastRampupOnRembCapLifted) {
   EXPECT_GT(final_estimate.kbps(), 1500);
 }
 
-TEST(GoogCcScenario, SlowRampupOnRembCapLiftedWithFieldTrial) {
-  ScopedFieldTrials trial("WebRTC-Bwe-ReceiverLimitCapsOnly/Disabled/");
-  DataRate final_estimate =
-      RunRembDipScenario("googcc_unit/legacy_slow_rampup_on_remb_cap_lifted");
-  EXPECT_LT(final_estimate.kbps(), 1000);
+TEST(GoogCcScenario, FallbackToLossBasedBweWithoutPacketFeedback) {
+  const DataRate kLinkCapacity = DataRate::KilobitsPerSec(1000);
+  const DataRate kStartRate = DataRate::KilobitsPerSec(1000);
+
+  Scenario s("googcc_unit/high_loss_channel", false);
+  auto* net = s.CreateMutableSimulationNode([&](NetworkSimulationConfig* c) {
+    c->bandwidth = kLinkCapacity;
+    c->delay = TimeDelta::Millis(100);
+  });
+  auto* client = s.CreateClient("send", [&](CallClientConfig* c) {
+    c->transport.rates.start_rate = kStartRate;
+  });
+  auto* route = s.CreateRoutes(
+      client, {net->node()}, s.CreateClient("return", CallClientConfig()),
+      {s.CreateSimulationNode(NetworkSimulationConfig())});
+
+  // Create a config without packet feedback.
+  VideoStreamConfig video_config;
+  video_config.stream.packet_feedback = false;
+  s.CreateVideoStream(route->forward(), video_config);
+
+  s.RunFor(TimeDelta::Seconds(20));
+  // Bandwith does not backoff because network is normal.
+  EXPECT_GE(client->target_rate().kbps(), 500);
+
+  // Update the network to create high loss ratio
+  net->UpdateConfig([](NetworkSimulationConfig* c) {
+    c->loss_rate = 0.15;
+  });
+  s.RunFor(TimeDelta::Seconds(20));
+
+  // Bandwidth decreases thanks to loss based bwe v0.
+  EXPECT_LE(client->target_rate().kbps(), 300);
 }
 
 }  // namespace test

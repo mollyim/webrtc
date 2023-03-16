@@ -85,7 +85,7 @@ class SdpOfferAnswerTest : public ::testing::Test {
     auto result = pc_factory_->CreatePeerConnectionOrError(
         config, PeerConnectionDependencies(observer.get()));
     EXPECT_TRUE(result.ok());
-    observer->SetPeerConnectionInterface(result.value());
+    observer->SetPeerConnectionInterface(result.value().get());
     return std::make_unique<PeerConnectionWrapper>(
         pc_factory_, result.MoveValue(), std::move(observer));
   }
@@ -95,6 +95,7 @@ class SdpOfferAnswerTest : public ::testing::Test {
   rtc::scoped_refptr<PeerConnectionFactoryInterface> pc_factory_;
 
  private:
+  rtc::AutoThread main_thread_;
 };
 
 TEST_F(SdpOfferAnswerTest, OnTrackReturnsProxiedObject) {
@@ -111,6 +112,156 @@ TEST_F(SdpOfferAnswerTest, OnTrackReturnsProxiedObject) {
   // Since the signaling thread is not the current thread,
   // this will DCHECK if the transceiver is not proxied.
   transceiver->stopped();
+}
+
+TEST_F(SdpOfferAnswerTest, BundleRejectsCodecCollisionsAudioVideo) {
+  auto pc = CreatePeerConnection();
+  std::string sdp =
+      "v=0\r\n"
+      "o=- 0 3 IN IP4 127.0.0.1\r\n"
+      "s=-\r\n"
+      "t=0 0\r\n"
+      "a=group:BUNDLE 0 1\r\n"
+      "a=fingerprint:sha-1 "
+      "4A:AD:B9:B1:3F:82:18:3B:54:02:12:DF:3E:5D:49:6B:19:E5:7C:AB\r\n"
+      "a=setup:actpass\r\n"
+      "a=ice-ufrag:ETEn\r\n"
+      "a=ice-pwd:OtSK0WpNtpUjkY4+86js7Z/l\r\n"
+      "m=audio 9 UDP/TLS/RTP/SAVPF 111\r\n"
+      "c=IN IP4 0.0.0.0\r\n"
+      "a=rtcp-mux\r\n"
+      "a=sendonly\r\n"
+      "a=mid:0\r\n"
+      "a=rtpmap:111 opus/48000/2\r\n"
+      "m=video 9 UDP/TLS/RTP/SAVPF 111\r\n"
+      "c=IN IP4 0.0.0.0\r\n"
+      "a=rtcp-mux\r\n"
+      "a=sendonly\r\n"
+      "a=mid:1\r\n"
+      "a=rtpmap:111 H264/90000\r\n"
+      "a=fmtp:111 "
+      "level-asymmetry-allowed=1;packetization-mode=0;profile-level-id="
+      "42e01f\r\n";
+
+  auto desc = CreateSessionDescription(SdpType::kOffer, sdp);
+  ASSERT_NE(desc, nullptr);
+  RTCError error;
+  pc->SetRemoteDescription(std::move(desc), &error);
+  EXPECT_TRUE(error.ok());
+  EXPECT_METRIC_EQ(
+      1, webrtc::metrics::NumEvents(
+             "WebRTC.PeerConnection.ValidBundledPayloadTypes", false));
+}
+
+TEST_F(SdpOfferAnswerTest, BundleRejectsCodecCollisionsVideoFmtp) {
+  auto pc = CreatePeerConnection();
+  std::string sdp =
+      "v=0\r\n"
+      "o=- 0 3 IN IP4 127.0.0.1\r\n"
+      "s=-\r\n"
+      "t=0 0\r\n"
+      "a=group:BUNDLE 0 1\r\n"
+      "a=fingerprint:sha-1 "
+      "4A:AD:B9:B1:3F:82:18:3B:54:02:12:DF:3E:5D:49:6B:19:E5:7C:AB\r\n"
+      "a=setup:actpass\r\n"
+      "a=ice-ufrag:ETEn\r\n"
+      "a=ice-pwd:OtSK0WpNtpUjkY4+86js7Z/l\r\n"
+      "m=video 9 UDP/TLS/RTP/SAVPF 111\r\n"
+      "c=IN IP4 0.0.0.0\r\n"
+      "a=rtcp-mux\r\n"
+      "a=sendonly\r\n"
+      "a=mid:0\r\n"
+      "a=rtpmap:111 H264/90000\r\n"
+      "a=fmtp:111 "
+      "level-asymmetry-allowed=1;packetization-mode=0;profile-level-id="
+      "42e01f\r\n"
+      "m=video 9 UDP/TLS/RTP/SAVPF 111\r\n"
+      "c=IN IP4 0.0.0.0\r\n"
+      "a=rtcp-mux\r\n"
+      "a=sendonly\r\n"
+      "a=mid:1\r\n"
+      "a=rtpmap:111 H264/90000\r\n"
+      "a=fmtp:111 "
+      "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id="
+      "42e01f\r\n";
+
+  auto desc = CreateSessionDescription(SdpType::kOffer, sdp);
+  ASSERT_NE(desc, nullptr);
+  RTCError error;
+  pc->SetRemoteDescription(std::move(desc), &error);
+  EXPECT_TRUE(error.ok());
+  EXPECT_METRIC_EQ(
+      1, webrtc::metrics::NumEvents(
+             "WebRTC.PeerConnection.ValidBundledPayloadTypes", false));
+}
+
+TEST_F(SdpOfferAnswerTest, BundleCodecCollisionInDifferentBundlesAllowed) {
+  auto pc = CreatePeerConnection();
+  std::string sdp =
+      "v=0\r\n"
+      "o=- 0 3 IN IP4 127.0.0.1\r\n"
+      "s=-\r\n"
+      "t=0 0\r\n"
+      "a=group:BUNDLE 0\r\n"
+      "a=group:BUNDLE 1\r\n"
+      "a=fingerprint:sha-1 "
+      "4A:AD:B9:B1:3F:82:18:3B:54:02:12:DF:3E:5D:49:6B:19:E5:7C:AB\r\n"
+      "a=setup:actpass\r\n"
+      "a=ice-ufrag:ETEn\r\n"
+      "a=ice-pwd:OtSK0WpNtpUjkY4+86js7Z/l\r\n"
+      "m=video 9 UDP/TLS/RTP/SAVPF 111\r\n"
+      "c=IN IP4 0.0.0.0\r\n"
+      "a=rtcp-mux\r\n"
+      "a=sendonly\r\n"
+      "a=mid:0\r\n"
+      "a=rtpmap:111 H264/90000\r\n"
+      "a=fmtp:111 "
+      "level-asymmetry-allowed=1;packetization-mode=0;profile-level-id="
+      "42e01f\r\n"
+      "m=video 9 UDP/TLS/RTP/SAVPF 111\r\n"
+      "c=IN IP4 0.0.0.0\r\n"
+      "a=rtcp-mux\r\n"
+      "a=sendonly\r\n"
+      "a=mid:1\r\n"
+      "a=rtpmap:111 H264/90000\r\n"
+      "a=fmtp:111 "
+      "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id="
+      "42e01f\r\n";
+
+  auto desc = CreateSessionDescription(SdpType::kOffer, sdp);
+  ASSERT_NE(desc, nullptr);
+  RTCError error;
+  pc->SetRemoteDescription(std::move(desc), &error);
+  EXPECT_TRUE(error.ok());
+  EXPECT_METRIC_EQ(
+      0, webrtc::metrics::NumEvents(
+             "WebRTC.PeerConnection.ValidBundledPayloadTypes", false));
+}
+
+TEST_F(SdpOfferAnswerTest, LargeMidsAreRejected) {
+  auto pc = CreatePeerConnection();
+  std::string sdp =
+      "v=0\r\n"
+      "o=- 0 3 IN IP4 127.0.0.1\r\n"
+      "s=-\r\n"
+      "t=0 0\r\n"
+      "a=fingerprint:sha-1 "
+      "4A:AD:B9:B1:3F:82:18:3B:54:02:12:DF:3E:5D:49:6B:19:E5:7C:AB\r\n"
+      "a=setup:actpass\r\n"
+      "a=ice-ufrag:ETEn\r\n"
+      "a=ice-pwd:OtSK0WpNtpUjkY4+86js7Z/l\r\n"
+      "m=video 9 UDP/TLS/RTP/SAVPF 111\r\n"
+      "c=IN IP4 0.0.0.0\r\n"
+      "a=rtcp-mux\r\n"
+      "a=sendonly\r\n"
+      "a=rtpmap:111 VP8/90000\r\n"
+      "a=mid:01234567890123456\r\n";
+  auto desc = CreateSessionDescription(SdpType::kOffer, sdp);
+  ASSERT_NE(desc, nullptr);
+  RTCError error;
+  pc->SetRemoteDescription(std::move(desc), &error);
+  EXPECT_FALSE(error.ok());
+  EXPECT_EQ(error.type(), RTCErrorType::INVALID_PARAMETER);
 }
 
 }  // namespace webrtc

@@ -14,7 +14,6 @@
 
 #include "pc/test/mock_voice_media_channel.h"
 #include "rtc_base/gunit.h"
-#include "rtc_base/ref_counted_object.h"
 #include "rtc_base/thread.h"
 #include "test/gmock.h"
 #include "test/gtest.h"
@@ -50,6 +49,7 @@ class AudioRtpReceiverTest : public ::testing::Test {
     receiver_->SetMediaChannel(nullptr);
   }
 
+  rtc::AutoThread main_thread_;
   rtc::Thread* worker_;
   rtc::scoped_refptr<AudioRtpReceiver> receiver_;
   cricket::MockVoiceMediaChannel media_channel_;
@@ -66,7 +66,7 @@ TEST_F(AudioRtpReceiverTest, SetOutputVolumeIsCalled) {
 
   receiver_->track();
   receiver_->track()->set_enabled(true);
-  receiver_->SetMediaChannel(&media_channel_);
+  receiver_->SetMediaChannel(media_channel_.AsVoiceReceiveChannel());
   EXPECT_CALL(media_channel_, SetDefaultRawAudioSink(_)).Times(0);
   receiver_->SetupMediaChannel(kSsrc);
 
@@ -86,7 +86,7 @@ TEST_F(AudioRtpReceiverTest, VolumesSetBeforeStartingAreRespected) {
   receiver_->OnSetVolume(kVolume);
 
   receiver_->track()->set_enabled(true);
-  receiver_->SetMediaChannel(&media_channel_);
+  receiver_->SetMediaChannel(media_channel_.AsVoiceReceiveChannel());
 
   // The previosly set initial volume should be propagated to the provided
   // media_channel_ as soon as SetupMediaChannel is called.

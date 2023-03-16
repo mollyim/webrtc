@@ -10,13 +10,10 @@
 
 package org.webrtc;
 
-import android.annotation.TargetApi;
 import android.content.Context;
 import android.hardware.camera2.CameraManager;
 import androidx.annotation.Nullable;
 
-// RingRTC change (or retention?) to keep support for SDK >= 19
-@TargetApi(21)
 public class Camera2Capturer extends CameraCapturer {
   private final Context context;
   @Nullable private final CameraManager cameraManager;

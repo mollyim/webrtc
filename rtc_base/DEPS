@@ -1,8 +1,8 @@
 include_rules = [
-  "+base/third_party/libevent",
   "+json",
   "+system_wrappers",
   "+third_party/jsoncpp",
+  "+third_party/libevent",
 ]
 
 specific_include_rules = {
@@ -11,5 +11,8 @@ specific_include_rules = {
   ],
   "gunit\.h": [
     "+testing/base/public/gunit.h"
+  ],
+  "sequence_numbers_conformance_test\.cc": [
+    "+net/dcsctp/common/sequence_numbers.h",
   ],
 }
