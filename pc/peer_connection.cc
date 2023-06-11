@@ -22,6 +22,7 @@
 #include "absl/algorithm/container.h"
 #include "absl/strings/match.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/optional.h"
 #include "api/jsep_ice_candidate.h"
 #include "api/rtp_parameters.h"
 #include "api/rtp_transceiver_direction.h"
@@ -1087,8 +1088,13 @@ PeerConnection::AddTransceiver(
   if (parameters.encodings.size() > 1 && num_rids == 0) {
     rtc::UniqueStringGenerator rid_generator;
     for (RtpEncodingParameters& encoding : parameters.encodings) {
-      encoding.rid = rid_generator();
+      encoding.rid = rid_generator.GenerateString();
     }
+  }
+
+  // If no encoding parameters were provided, a default entry is created.
+  if (parameters.encodings.empty()) {
+    parameters.encodings.push_back({});
   }
 
   if (UnimplementedRtpParameterHasValue(parameters)) {
@@ -2018,6 +2024,19 @@ void PeerConnection::ReportFirstConnectUsageMetrics() {
         "WebRTC.PeerConnection.ValidIceChars",
         !(isUsingInvalidIceCharInUfrag || isUsingInvalidIceCharInPwd));
   }
+
+  // Record RtcpMuxPolicy setting.
+  RtcpMuxPolicyUsage rtcp_mux_policy = kRtcpMuxPolicyUsageMax;
+  switch (configuration_.rtcp_mux_policy) {
+    case kRtcpMuxPolicyNegotiate:
+      rtcp_mux_policy = kRtcpMuxPolicyUsageNegotiate;
+      break;
+    case kRtcpMuxPolicyRequire:
+      rtcp_mux_policy = kRtcpMuxPolicyUsageRequire;
+      break;
+  }
+  RTC_HISTOGRAM_ENUMERATION("WebRTC.PeerConnection.RtcpMuxPolicy",
+                            rtcp_mux_policy, kRtcpMuxPolicyUsageMax);
 }
 
 void PeerConnection::OnIceGatheringChange(
@@ -2087,7 +2106,7 @@ void PeerConnection::SetSctpDataMid(const std::string& mid) {
 void PeerConnection::ResetSctpDataMid() {
   RTC_DCHECK_RUN_ON(signaling_thread());
   sctp_mid_s_.reset();
-  sctp_transport_name_s_.clear();
+  SetSctpTransportName("");
 }
 
 void PeerConnection::OnSctpDataChannelClosed(DataChannelInterface* channel) {
@@ -2309,6 +2328,12 @@ absl::optional<std::string> PeerConnection::sctp_transport_name() const {
   return absl::optional<std::string>();
 }
 
+void PeerConnection::SetSctpTransportName(std::string sctp_transport_name) {
+  RTC_DCHECK_RUN_ON(signaling_thread());
+  sctp_transport_name_s_ = std::move(sctp_transport_name);
+  ClearStatsCache();
+}
+
 absl::optional<std::string> PeerConnection::sctp_mid() const {
   RTC_DCHECK_RUN_ON(signaling_thread());
   return sctp_mid_s_;
@@ -2510,6 +2535,13 @@ Call::Stats PeerConnection::GetCallStats() {
   }
 }
 
+absl::optional<AudioDeviceModule::Stats> PeerConnection::GetAudioDeviceStats() {
+  if (context_->media_engine()) {
+    return context_->media_engine()->voice().GetAudioDeviceStats();
+  }
+  return absl::nullopt;
+}
+
 bool PeerConnection::SetupDataChannelTransport_n(const std::string& mid) {
   DataChannelTransportInterface* transport =
       transport_controller_->GetDataChannelTransport(mid);
@@ -2531,7 +2563,7 @@ bool PeerConnection::SetupDataChannelTransport_n(const std::string& mid) {
         SafeTask(signaling_thread_safety_.flag(),
                  [this, name = dtls_transport->transport_name()] {
                    RTC_DCHECK_RUN_ON(signaling_thread());
-                   sctp_transport_name_s_ = std::move(name);
+                   SetSctpTransportName(std::move(name));
                  }));
   }
 
@@ -2919,7 +2951,7 @@ bool PeerConnection::OnTransportChanged(
           [this,
            name = std::string(dtls_transport->internal()->transport_name())] {
             RTC_DCHECK_RUN_ON(signaling_thread());
-            sctp_transport_name_s_ = std::move(name);
+            SetSctpTransportName(std::move(name));
           }));
     }
   }
@@ -2988,10 +3020,11 @@ std::function<void(const rtc::CopyOnWriteBuffer& packet,
                    int64_t packet_time_us)>
 PeerConnection::InitializeRtcpCallback() {
   RTC_DCHECK_RUN_ON(network_thread());
-  return [this](const rtc::CopyOnWriteBuffer& packet, int64_t packet_time_us) {
-    RTC_DCHECK_RUN_ON(network_thread());
-    call_ptr_->Receiver()->DeliverPacket(MediaType::ANY, packet,
-                                         packet_time_us);
+  return [this](const rtc::CopyOnWriteBuffer& packet,
+                int64_t /*packet_time_us*/) {
+    worker_thread()->PostTask(SafeTask(worker_thread_safety_, [this, packet]() {
+      call_ptr_->Receiver()->DeliverRtcpPacket(packet);
+    }));
   };
 }
 
