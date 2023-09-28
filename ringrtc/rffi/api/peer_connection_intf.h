@@ -100,6 +100,7 @@ RUSTEXPORT webrtc::SessionDescriptionInterface*
 Rust_sessionDescriptionFromV4(bool offer,
                               const RffiConnectionParametersV4* v4_borrowed,
                               bool enable_tcc_audio,
+                              bool enable_red_audio,
                               bool enable_vp9);
 
 RUSTEXPORT void
@@ -183,5 +184,8 @@ Rust_getAudioLevels(webrtc::PeerConnectionInterface* peer_connection_borrowed_rc
                     cricket::ReceivedAudioLevel* received_out,
                     size_t received_out_size,
                     size_t* received_size_out);
+
+RUSTEXPORT uint32_t
+Rust_getLastBandwidthEstimateBps(webrtc::PeerConnectionInterface* peer_connection_borrowed_rc);
 
 #endif /* RFFI_API_PEER_CONNECTION_INTF_H__ */

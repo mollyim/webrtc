@@ -39,6 +39,7 @@ int TX_TIME_OFFSET_EXT_ID = 13;
 // 101 used by connection.rs
 int DATA_PT = 101;
 int OPUS_PT = 102;
+int OPUS_RED_PT = 105;
 int VP8_PT = 108;
 int VP8_RTX_PT = 118;
 int VP9_PT = 109;
@@ -194,15 +195,15 @@ Rust_sessionDescriptionToV4(const webrtc::SessionDescriptionInterface* session_d
       if (codec_type == webrtc::kVideoCodecVP9) {
         if (enable_vp9) {
           auto profile = ParseSdpForVP9Profile(codec.params);
+          std::string profile_id_string;
+          codec.GetParam("profile-id", &profile_id_string);
           if (!profile) {
-            std::string profile_id_string;
-            codec.GetParam("profile-id", &profile_id_string);
             RTC_LOG(LS_WARNING) << "Ignoring VP9 codec because profile-id = " << profile_id_string;
             continue;
           }
 
           if (profile != VP9Profile::kProfile0) {
-            RTC_LOG(LS_WARNING) << "Ignoring VP9 codec with profile-id != 0";
+            RTC_LOG(LS_WARNING) << "Ignoring VP9 codec with non-zero profile-id = " << profile_id_string;
             continue;
           }
 
@@ -246,12 +247,14 @@ RUSTEXPORT webrtc::SessionDescriptionInterface*
 Rust_sessionDescriptionFromV4(bool offer,
                               const RffiConnectionParametersV4* v4_borrowed,
                               bool enable_tcc_audio,
+                              bool enable_red_audio,
                               bool enable_vp9) {
   // Major changes from the default WebRTC behavior:
   // 1. We remove all codecs except Opus, VP8, and VP9
   // 2. We remove all header extensions except for transport-cc, video orientation,
   //    and abs send time.
   // 3. Opus CBR and DTX is enabled.
+  // 4. RED is enabled for audio.
 
   // For some reason, WebRTC insists that the video SSRCs for one side don't 
   // overlap with SSRCs from the other side.  To avoid potential problems, we'll give the
@@ -289,13 +292,22 @@ Rust_sessionDescriptionFromV4(bool offer,
   auto video = std::make_unique<cricket::VideoContentDescription>();
   set_rtp_params(video.get());
 
-  auto opus = cricket::AudioCodec(OPUS_PT, cricket::kOpusCodecName, 48000, 0, 2);
+  // Turn on the RED "meta codec" for Opus redundancy.
+  auto opus_red = cricket::CreateAudioCodec(OPUS_RED_PT, cricket::kRedCodecName, 48000, 2);
+  opus_red.SetParam("", std::to_string(OPUS_PT) + "/" + std::to_string(OPUS_PT));
+
+  if (enable_red_audio) {
+    // Add RED before Opus to use it by default when sending.
+    audio->AddCodec(opus_red);
+  }
+
+  auto opus = cricket::CreateAudioCodec(OPUS_PT, cricket::kOpusCodecName, 48000, 2);
   // These are the current defaults for WebRTC
   // We set them explicitly to avoid having the defaults change on us.
   opus.SetParam("stereo", "0");  // "1" would cause non-VOIP mode to be used
-  opus.SetParam("ptime", "20");
-  opus.SetParam("minptime", "10");
-  opus.SetParam("maxptime", "120");
+  opus.SetParam("ptime", "60");
+  opus.SetParam("minptime", "60");
+  opus.SetParam("maxptime", "60");
   opus.SetParam("useinbandfec", "1");
   // This is not a default. We enable this to help reduce bandwidth because we
   // are using CBR.
@@ -305,6 +317,11 @@ Rust_sessionDescriptionFromV4(bool offer,
   opus.SetParam("cbr", "1");
   opus.AddFeedbackParam(cricket::FeedbackParam(cricket::kRtcpFbParamTransportCc, cricket::kParamValueEmpty));
   audio->AddCodec(opus);
+
+  if (!enable_red_audio) {
+    // Add RED after Opus so that RED packets can at least be decoded properly if received.
+    audio->AddCodec(opus_red);
+  }
 
   auto add_video_feedback_params = [] (cricket::VideoCodec* video_codec) {
     video_codec->AddFeedbackParam(cricket::FeedbackParam(cricket::kRtcpFbParamTransportCc, cricket::kParamValueEmpty));
@@ -320,19 +337,20 @@ Rust_sessionDescriptionFromV4(bool offer,
 
   for (size_t i = 0; i < v4_borrowed->receive_video_codecs_size; i++) {
     RffiVideoCodec rffi_codec = v4_borrowed->receive_video_codecs_borrowed[i];
-    cricket::VideoCodec codec;
     if (rffi_codec.type == kRffiVideoCodecVp9) {
       if (enable_vp9) {
-        auto vp9 = cricket::VideoCodec(VP9_PT, cricket::kVp9CodecName);
-        auto vp9_rtx = cricket::VideoCodec::CreateRtxCodec(VP9_RTX_PT, VP9_PT);
+        auto vp9 = cricket::CreateVideoCodec(VP9_PT, cricket::kVp9CodecName);
+        vp9.params[kVP9FmtpProfileId] = VP9ProfileToString(VP9Profile::kProfile0);
+        auto vp9_rtx = cricket::CreateVideoRtxCodec(VP9_RTX_PT, VP9_PT);
+        vp9_rtx.params[kVP9FmtpProfileId] = VP9ProfileToString(VP9Profile::kProfile0);
         add_video_feedback_params(&vp9);
 
         video->AddCodec(vp9);
         video->AddCodec(vp9_rtx);
       }
     } else if (rffi_codec.type == kRffiVideoCodecVp8) {
-      auto vp8 = cricket::VideoCodec(VP8_PT, cricket::kVp8CodecName);
-      auto vp8_rtx = cricket::VideoCodec::CreateRtxCodec(VP8_RTX_PT, VP8_PT);
+      auto vp8 = cricket::CreateVideoCodec(VP8_PT, cricket::kVp8CodecName);
+      auto vp8_rtx = cricket::CreateVideoRtxCodec(VP8_RTX_PT, VP8_PT);
       add_video_feedback_params(&vp8);
 
       video->AddCodec(vp8);
@@ -342,9 +360,9 @@ Rust_sessionDescriptionFromV4(bool offer,
 
   // These are "meta codecs" for redundancy and FEC.
   // They are enabled by default currently with WebRTC.
-  auto red = cricket::VideoCodec(RED_PT, cricket::kRedCodecName);
-  auto red_rtx = cricket::VideoCodec::CreateRtxCodec(RED_RTX_PT, RED_PT);
-  auto ulpfec = cricket::VideoCodec(ULPFEC_PT, cricket::kUlpfecCodecName);
+  auto red = cricket::CreateVideoCodec(RED_PT, cricket::kRedCodecName);
+  auto red_rtx = cricket::CreateVideoRtxCodec(RED_RTX_PT, RED_PT);
+  auto ulpfec = cricket::CreateVideoCodec(ULPFEC_PT, cricket::kUlpfecCodecName);
 
   video->AddCodec(red);
   video->AddCodec(red_rtx);
@@ -472,13 +490,13 @@ CreateSessionDescriptionForGroupCall(bool local,
   auto video = std::make_unique<cricket::VideoContentDescription>();
   set_rtp_params(video.get());
 
-  auto opus = cricket::AudioCodec(OPUS_PT, cricket::kOpusCodecName, 48000, 0, 2);
+  auto opus = cricket::CreateAudioCodec(OPUS_PT, cricket::kOpusCodecName, 48000, 2);
   // These are the current defaults for WebRTC
   // We set them explicitly to avoid having the defaults change on us.
   opus.SetParam("stereo", "0");  // "1" would cause non-VOIP mode to be used
-  opus.SetParam("ptime", "20");
-  opus.SetParam("minptime", "10");
-  opus.SetParam("maxptime", "120");
+  opus.SetParam("ptime", "60");
+  opus.SetParam("minptime", "60");
+  opus.SetParam("maxptime", "60");
   opus.SetParam("useinbandfec", "1");
   // This is not a default. We enable this to help reduce bandwidth because we
   // are using CBR.
@@ -489,6 +507,13 @@ CreateSessionDescriptionForGroupCall(bool local,
   opus.AddFeedbackParam(cricket::FeedbackParam(cricket::kRtcpFbParamTransportCc, cricket::kParamValueEmpty));
   audio->AddCodec(opus);
 
+  // Turn on the RED "meta codec" for Opus redundancy.
+  auto opus_red = cricket::CreateAudioCodec(OPUS_RED_PT, cricket::kRedCodecName, 48000, 2);
+  opus_red.SetParam("", std::to_string(OPUS_PT) + "/" + std::to_string(OPUS_PT));
+
+  // Add RED after Opus so that RED packets can at least be decoded properly if received.
+  audio->AddCodec(opus_red);
+
   auto add_video_feedback_params = [] (cricket::VideoCodec* video_codec) {
     video_codec->AddFeedbackParam(cricket::FeedbackParam(cricket::kRtcpFbParamTransportCc, cricket::kParamValueEmpty));
     video_codec->AddFeedbackParam(cricket::FeedbackParam(cricket::kRtcpFbParamCcm, cricket::kRtcpFbCcmParamFir));
@@ -497,8 +522,8 @@ CreateSessionDescriptionForGroupCall(bool local,
     video_codec->AddFeedbackParam(cricket::FeedbackParam(cricket::kRtcpFbParamRemb, cricket::kParamValueEmpty));
   };
 
-  auto vp8 = cricket::VideoCodec(VP8_PT, cricket::kVp8CodecName);
-  auto vp8_rtx = cricket::VideoCodec::CreateRtxCodec(VP8_RTX_PT, VP8_PT);
+  auto vp8 = cricket::CreateVideoCodec(VP8_PT, cricket::kVp8CodecName);
+  auto vp8_rtx = cricket::CreateVideoRtxCodec(VP8_RTX_PT, VP8_PT);
   add_video_feedback_params(&vp8);
 
   video->AddCodec(vp8);
@@ -506,8 +531,8 @@ CreateSessionDescriptionForGroupCall(bool local,
 
   // These are "meta codecs" for redundancy and FEC.
   // They are enabled by default currently with WebRTC.
-  auto red = cricket::VideoCodec(RED_PT, cricket::kRedCodecName);
-  auto red_rtx = cricket::VideoCodec::CreateRtxCodec(RED_RTX_PT, RED_PT);
+  auto red = cricket::CreateVideoCodec(RED_PT, cricket::kRedCodecName);
+  auto red_rtx = cricket::CreateVideoRtxCodec(RED_RTX_PT, RED_PT);
 
   video->AddCodec(red);
   video->AddCodec(red_rtx);
@@ -876,6 +901,12 @@ Rust_getAudioLevels(webrtc::PeerConnectionInterface* peer_connection_borrowed_rc
                     size_t* received_size_out) {
   RTC_LOG(LS_VERBOSE) << "Rust_getAudioLevels(...)";
   peer_connection_borrowed_rc->GetAudioLevels(captured_out, received_out, received_out_size, received_size_out);
+}
+
+RUSTEXPORT uint32_t
+Rust_getLastBandwidthEstimateBps(webrtc::PeerConnectionInterface* peer_connection_borrowed_rc) {
+  RTC_LOG(LS_VERBOSE) << "Rust_getLastBandwidthEstimateBps(...)";
+  return peer_connection_borrowed_rc->GetLastBandwidthEstimateBps();
 }
 
 RUSTEXPORT void

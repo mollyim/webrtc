@@ -9,8 +9,13 @@
 #include "api/rtc_event_log/rtc_event_log_factory.h"
 #include "api/audio_codecs/builtin_audio_decoder_factory.h"
 #include "api/audio_codecs/builtin_audio_encoder_factory.h"
-#include "api/video_codecs/builtin_video_decoder_factory.h"
-#include "api/video_codecs/builtin_video_encoder_factory.h"
+#include "api/video_codecs/video_decoder_factory_template.h"
+#include "api/video_codecs/video_decoder_factory_template_libvpx_vp8_adapter.h"
+#include "api/video_codecs/video_decoder_factory_template_libvpx_vp9_adapter.h"
+#include "api/video_codecs/video_encoder_factory_template.h"
+#include "api/video_codecs/video_encoder_factory_template_libvpx_vp8_adapter.h"
+#include "api/video_codecs/video_encoder_factory_template_libvpx_vp9_adapter.h"
+#include "media/engine/simulcast_encoder_adapter.h"
 #include "media/engine/webrtc_media_engine.h"
 #include "modules/audio_mixer/audio_mixer_impl.h"
 #include "modules/audio_device/dummy/file_audio_device_factory.h"
@@ -26,10 +31,6 @@
 #include "rtc_base/log_sinks.h"
 #include "rtc_base/message_digest.h"
 
-#if defined(WEBRTC_ANDROID)
-#include "sdk/android/src/jni/pc/android_network_monitor.h"
-#endif
-
 #if defined(WEBRTC_WIN)
 #include "modules/audio_device/win/core_audio_utility_win.h"
 #include "modules/audio_device/include/audio_device_factory.h"
@@ -38,6 +39,49 @@
 
 namespace webrtc {
 namespace rffi {
+
+#if !defined(WEBRTC_IOS) && !defined(WEBRTC_ANDROID)
+// This class adds simulcast support to the base factory and is modeled using
+// the same business logic found in BuiltinVideoEncoderFactory and
+// InternalEncoderFactory.
+class RingRTCVideoEncoderFactory : public VideoEncoderFactory {
+ public:
+  std::vector<SdpVideoFormat> GetSupportedFormats() const override {
+    return factory_.GetSupportedFormats();
+  }
+
+  std::unique_ptr<VideoEncoder> CreateVideoEncoder(
+      const SdpVideoFormat& format) override {
+    if (format.IsCodecInList(
+        factory_.GetSupportedFormats())) {
+      if (absl::optional<SdpVideoFormat> original_format =
+              FuzzyMatchSdpVideoFormat(factory_.GetSupportedFormats(),
+                                       format)) {
+        // Create a simulcast enabled encoder
+        // The adapter has a passthrough mode for the case that simulcast is not
+        // used, so all responsibility can be delegated to it.
+        return std::make_unique<SimulcastEncoderAdapter>(
+            &factory_, *original_format);
+      }
+    }
+    return nullptr;
+  }
+
+  CodecSupport QueryCodecSupport(
+      const SdpVideoFormat& format,
+      absl::optional<std::string> scalability_mode) const override {
+    auto original_format =
+        FuzzyMatchSdpVideoFormat(factory_.GetSupportedFormats(), format);
+    return original_format
+           ? factory_.QueryCodecSupport(*original_format, scalability_mode)
+           : VideoEncoderFactory::CodecSupport{.is_supported = false};
+  }
+
+ private:
+  VideoEncoderFactoryTemplate<LibvpxVp8EncoderTemplateAdapter,
+  LibvpxVp9EncoderTemplateAdapter>
+      factory_;
+};
 
 class PeerConnectionFactoryWithOwnedThreads
     : public PeerConnectionFactoryOwner {
@@ -76,9 +120,6 @@ class PeerConnectionFactoryWithOwnedThreads
     dependencies.task_queue_factory = CreateDefaultTaskQueueFactory();
     dependencies.call_factory = CreateCallFactory();
     dependencies.event_log_factory = std::make_unique<RtcEventLogFactory>(dependencies.task_queue_factory.get());
-#if defined(WEBRTC_ANDROID)
-    dependencies.network_monitor_factory = std::make_unique<jni::AndroidNetworkMonitorFactory>();
-#endif
     cricket::MediaEngineDependencies media_dependencies;
     media_dependencies.task_queue_factory = dependencies.task_queue_factory.get();
 
@@ -124,8 +165,11 @@ class PeerConnectionFactoryWithOwnedThreads
       .Create();
 
     media_dependencies.audio_mixer = AudioMixerImpl::Create();
-    media_dependencies.video_encoder_factory = CreateBuiltinVideoEncoderFactory();
-    media_dependencies.video_decoder_factory = CreateBuiltinVideoDecoderFactory();
+    media_dependencies.video_encoder_factory =
+        std::make_unique<RingRTCVideoEncoderFactory>();
+    media_dependencies.video_decoder_factory =
+        std::make_unique<VideoDecoderFactoryTemplate<
+            LibvpxVp8DecoderTemplateAdapter, LibvpxVp9DecoderTemplateAdapter>>();
     dependencies.media_engine = cricket::CreateMediaEngine(std::move(media_dependencies));
 
     auto factory = CreateModularPeerConnectionFactory(std::move(dependencies));
@@ -278,15 +322,20 @@ class PeerConnectionFactoryWithOwnedThreads
   webrtc::AudioDeviceModule* audio_device_module_;
   const rtc::scoped_refptr<PeerConnectionFactoryInterface> factory_;
 };
+#endif // !defined(WEBRTC_IOS) && !defined(WEBRTC_ANDROID)
 
 // Returns an owned RC.
 RUSTEXPORT PeerConnectionFactoryOwner* Rust_createPeerConnectionFactory(
     RffiAudioConfig audio_config,
     bool use_injectable_network) {
+#if !defined(WEBRTC_IOS) && !defined(WEBRTC_ANDROID)
   auto factory_owner = PeerConnectionFactoryWithOwnedThreads::Create(
     audio_config,
     use_injectable_network);
   return take_rc(std::move(factory_owner));
+#else
+  return nullptr;
+#endif
 }
 
 // Returns an owned RC.
@@ -316,6 +365,7 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
     PeerConnectionObserverRffi* observer_borrowed,
     RffiPeerConnectionKind kind,
     int audio_jitter_buffer_max_packets,
+    int audio_rtcp_report_interval_ms,
     RffiIceServer ice_server,
     webrtc::AudioTrackInterface* outgoing_audio_track_borrowed_rc,
     webrtc::VideoTrackInterface* outgoing_video_track_borrowed_rc) {
@@ -331,6 +381,7 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
     config.tcp_candidate_policy = PeerConnectionInterface::kTcpCandidatePolicyEnabled;
   }
   config.audio_jitter_buffer_max_packets = audio_jitter_buffer_max_packets;
+  config.set_audio_rtcp_report_interval_ms(audio_rtcp_report_interval_ms);
   config.sdp_semantics = SdpSemantics::kPlanB_DEPRECATED;
   if (ice_server.urls_size > 0) {
     webrtc::PeerConnectionInterface::IceServer rtc_ice_server;
@@ -426,9 +477,8 @@ RUSTEXPORT VideoTrackInterface* Rust_createVideoTrack(
     VideoTrackSourceInterface* source_borrowed_rc) {
   auto factory = factory_owner_borrowed_rc->peer_connection_factory();
 
-  // PeerConnectionFactory::CreateVideoTrack increments the refcount on source.
   // Note: This must stay "video1" to stay in sync with V4 signaling.
-  return take_rc(factory->CreateVideoTrack("video1", source_borrowed_rc));
+  return take_rc(factory->CreateVideoTrack(rtc::scoped_refptr<VideoTrackSourceInterface>(source_borrowed_rc), "video1"));
 }
 
 RUSTEXPORT int16_t Rust_getAudioPlayoutDevices(
