@@ -385,6 +385,15 @@ class RTC_EXPORT PeerConnectionInterface : public rtc::RefCountInterface {
           audio_rtcp_report_interval_ms;
     }
 
+    // RingRTC change to configure the audio jitter buffer's max target delay.
+    int audio_jitter_buffer_max_target_delay_ms() const {
+      return media_config.audio.jitter_buffer_max_target_delay_ms;
+    }
+    void set_audio_jitter_buffer_max_target_delay_ms(int jitter_buffer_max_target_delay_ms) {
+      media_config.audio.jitter_buffer_max_target_delay_ms =
+          jitter_buffer_max_target_delay_ms;
+    }
+
     int video_rtcp_report_interval_ms() const {
       return media_config.video.rtcp_report_interval_ms;
     }
@@ -1164,8 +1173,7 @@ class RTC_EXPORT PeerConnectionInterface : public rtc::RefCountInterface {
   virtual bool UseSharedIceGatherer(
       rtc::scoped_refptr<webrtc::IceGathererInterface> shared_ice_gatherer);
 
-  // RingRTC change to RTP from being processed before the call is accepted
-  // If false, all RTP and RTCP packets will be dropped before being processed.
+  // RingRTC change to explicitly control when incoming packets can be processed
   virtual bool SetIncomingRtpEnabled(bool enabled);
 
   // RingRTC change to send RTP data
@@ -1175,7 +1183,7 @@ class RTC_EXPORT PeerConnectionInterface : public rtc::RefCountInterface {
 
   // RingRTC change to receive RTP data
   // Packets will go to the PeerConnectionObserver
-  virtual bool ReceiveRtp(uint8_t pt);
+  virtual bool ReceiveRtp(uint8_t pt, bool enable_incoming);
 
   virtual void ConfigureAudioEncoders(const webrtc::AudioEncoder::Config& config) {
     RTC_LOG(LS_WARNING) << "Default PeerConnectionInterface::ConfigureAudioEncoders(...) does nothing!";
@@ -1210,6 +1218,9 @@ class RTC_EXPORT PeerConnectionInterface : public rtc::RefCountInterface {
   // Note that even if recording is enabled, streams will only be recorded if
   // the appropriate SDP is also applied.
   virtual void SetAudioRecording(bool recording) {}
+
+  // RingRTC change to disable CNG for muted incoming streams.
+  virtual void SetIncomingAudioMuted(uint32_t ssrc, bool muted) {}
 
   // Looks up the DtlsTransport associated with a MID value.
   // In the Javascript API, DtlsTransport is a property of a sender, but

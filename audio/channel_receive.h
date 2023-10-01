@@ -104,6 +104,8 @@ class ChannelReceiveInterface : public RtpPacketSinkInterface {
   virtual void ReceivedRTCPPacket(const uint8_t* data, size_t length) = 0;
 
   virtual void SetChannelOutputVolumeScaling(float scaling) = 0;
+  // RingRTC change to disable CNG for muted incoming streams.
+  virtual void SetIncomingAudioMuted(bool muted) = 0;
   virtual int GetSpeechOutputLevelFullRange() const = 0;
   // See description of "totalAudioEnergy" in the WebRTC stats spec:
   // https://w3c.github.io/webrtc-stats/#dom-rtcmediastreamtrackstats-totalaudioenergy
@@ -181,6 +183,8 @@ std::unique_ptr<ChannelReceiveInterface> CreateChannelReceive(
     size_t jitter_buffer_max_packets,
     bool jitter_buffer_fast_playout,
     int jitter_buffer_min_delay_ms,
+    // RingRTC change to configure the jitter buffer's max target delay.
+    int jitter_buffer_max_target_delay_ms,
     // RingRTC change to configure the RTCP report interval.
     int rtcp_report_interval_ms,
     bool enable_non_sender_rtt,

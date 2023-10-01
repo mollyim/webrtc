@@ -1748,6 +1748,14 @@ void PeerConnection::SetAudioRecording(bool recording) {
   audio_state->SetRecording(recording);
 }
 
+// RingRTC change to disable CNG for muted incoming streams.
+void PeerConnection::SetIncomingAudioMuted(uint32_t ssrc, bool muted) {
+  auto* voice_channel = static_cast<cricket::VoiceChannel*>(rtp_manager()->GetAudioTransceiver()->internal()->channel());
+  if (voice_channel) {
+    voice_channel->SetIncomingAudioMuted(ssrc, muted);
+  }
+}
+
 void PeerConnection::AddAdaptationResource(
     rtc::scoped_refptr<Resource> resource) {
   if (!worker_thread()->IsCurrent()) {
@@ -3025,6 +3033,7 @@ bool PeerConnection::UseSharedIceGatherer(
   return true;
 }
 
+// RingRTC change to explicitly control when incoming packets can be processed
 bool PeerConnection::SetIncomingRtpEnabled(bool enabled) {
   return network_thread()->BlockingCall([this, enabled] {
     JsepTransportController* transport_controller = this->transport_controller_n();
@@ -3055,15 +3064,19 @@ bool PeerConnection::SendRtp(std::unique_ptr<RtpPacket> rtp_packet) {
   });
 }
 
-bool PeerConnection::ReceiveRtp(uint8_t pt) {
+// RingRTC change to receive RTP data
+bool PeerConnection::ReceiveRtp(uint8_t pt, bool enable_incoming) {
   RtpDemuxerCriteria demux_criteria;
   demux_criteria.payload_types().insert(pt);
   RtpPacketSinkInterface* sink = Observer();
-  return network_thread()->BlockingCall([this, demux_criteria, sink] {
+  return network_thread()->BlockingCall([this, demux_criteria, sink, enable_incoming] {
     JsepTransportController* transport_controller = this->transport_controller_n();
     RtpTransportInternal* rtp_transport = transport_controller->GetBundledRtpTransport();
     if (!rtp_transport) {
       return false;
+    }
+    if (enable_incoming) {
+      rtp_transport->SetIncomingRtpEnabled(true);
     }
     return rtp_transport->RegisterRtpDemuxerSink(demux_criteria, sink);
   });
