@@ -453,10 +453,11 @@ RTCErrorOr<rtc::scoped_refptr<PeerConnection>> PeerConnection::Create(
 
   // Interim code: If an AsyncResolverFactory is given, but not an
   // AsyncDnsResolverFactory, wrap it in a WrappingAsyncDnsResolverFactory
-  // If neither is given, create a WrappingAsyncDnsResolverFactory wrapping
-  // a BasicAsyncResolver.
+  // If neither is given, create a BasicAsyncDnsResolverFactory.
   // TODO(bugs.webrtc.org/12598): Remove code once all callers pass a
   // AsyncDnsResolverFactory.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
   if (dependencies.async_dns_resolver_factory &&
       dependencies.async_resolver_factory) {
     RTC_LOG(LS_ERROR)
@@ -464,15 +465,17 @@ RTCErrorOr<rtc::scoped_refptr<PeerConnection>> PeerConnection::Create(
     return RTCError(RTCErrorType::INVALID_PARAMETER,
                     "Both old and new type of DNS resolver given");
   }
-  if (dependencies.async_resolver_factory) {
-    dependencies.async_dns_resolver_factory =
-        std::make_unique<WrappingAsyncDnsResolverFactory>(
-            std::move(dependencies.async_resolver_factory));
-  } else {
-    dependencies.async_dns_resolver_factory =
-        std::make_unique<WrappingAsyncDnsResolverFactory>(
-            std::make_unique<BasicAsyncResolverFactory>());
+  if (!dependencies.async_dns_resolver_factory) {
+    if (dependencies.async_resolver_factory) {
+      dependencies.async_dns_resolver_factory =
+          std::make_unique<WrappingAsyncDnsResolverFactory>(
+              std::move(dependencies.async_resolver_factory));
+    } else {
+      dependencies.async_dns_resolver_factory =
+          std::make_unique<BasicAsyncDnsResolverFactory>();
+    }
   }
+#pragma clang diagnostic pop
 
   // The PeerConnection constructor consumes some, but not all, dependencies.
   auto pc = rtc::make_ref_counted<PeerConnection>(
@@ -1104,14 +1107,20 @@ PeerConnection::AddTransceiver(
   }
 
   std::vector<cricket::VideoCodec> codecs;
+  // Gather the current codec capabilities to allow checking scalabilityMode and
+  // codec selection against supported values.
   if (media_type == cricket::MEDIA_TYPE_VIDEO) {
-    // Gather the current codec capabilities to allow checking scalabilityMode
-    // against supported values.
     codecs = context_->media_engine()->video().send_codecs(false);
+  } else {
+    codecs = context_->media_engine()->voice().send_codecs();
   }
 
-  auto result = cricket::CheckRtpParametersValues(parameters, codecs);
+  auto result =
+      cricket::CheckRtpParametersValues(parameters, codecs, absl::nullopt);
   if (!result.ok()) {
+    if (result.type() == RTCErrorType::INVALID_MODIFICATION) {
+      result.set_type(RTCErrorType::UNSUPPORTED_OPERATION);
+    }
     LOG_AND_RETURN_ERROR(result.type(), result.message());
   }
 
@@ -1784,9 +1793,9 @@ bool PeerConnection::StartRtcEventLog(std::unique_ptr<RtcEventLogOutput> output,
 
 bool PeerConnection::StartRtcEventLog(
     std::unique_ptr<RtcEventLogOutput> output) {
-  int64_t output_period_ms = webrtc::RtcEventLog::kImmediateOutput;
-  if (trials().IsEnabled("WebRTC-RtcEventLogNewFormat")) {
-    output_period_ms = 5000;
+  int64_t output_period_ms = 5000;
+  if (trials().IsDisabled("WebRTC-RtcEventLogNewFormat")) {
+    output_period_ms = webrtc::RtcEventLog::kImmediateOutput;
   }
   return StartRtcEventLog(std::move(output), output_period_ms);
 }
@@ -1906,13 +1915,24 @@ void PeerConnection::Close() {
     rtp_manager_->Close();
   }
 
-  network_thread()->BlockingCall([this] {
+  // RingRTC change to receive RTP data
+  RtpPacketSinkInterface* sink = Observer();
+
+  network_thread()->BlockingCall([this, sink] {
     // Data channels will already have been unset via the DestroyAllChannels()
     // call above, which triggers a call to TeardownDataChannelTransport_n().
     // TODO(tommi): ^^ That's not exactly optimal since this is yet another
     // blocking hop to the network thread during Close(). Further still, the
     // voice/video/data channels will be cleared on the worker thread.
     RTC_DCHECK_RUN_ON(network_thread());
+
+    // RingRTC change to receive RTP data
+    if (rtp_demuxer_sink_registered_) {
+      JsepTransportController *transport_controller = this->transport_controller_n();
+      RtpTransportInternal *rtp_transport = transport_controller->GetBundledRtpTransport();
+      rtp_transport->UnregisterRtpDemuxerSink(sink);
+    }
+
     transport_controller_.reset();
     port_allocator_->DiscardCandidatePool();
     if (network_thread_safety_) {
@@ -2182,8 +2202,8 @@ PeerConnection::InitializePortAllocator_n(
   }
 
   port_allocator_->set_flags(port_allocator_flags);
-  // No step delay is used while allocating ports.
-  port_allocator_->set_step_delay(cricket::kMinimumStepDelay);
+  // RingRTC change to use no step delay while allocating ports.
+  port_allocator_->set_step_delay(0);
   port_allocator_->SetCandidateFilter(
       ConvertIceTransportTypeToCandidateFilter(configuration.type));
   port_allocator_->set_max_ipv6_networks(configuration.max_ipv6_networks);
@@ -3078,7 +3098,8 @@ bool PeerConnection::ReceiveRtp(uint8_t pt, bool enable_incoming) {
     if (enable_incoming) {
       rtp_transport->SetIncomingRtpEnabled(true);
     }
-    return rtp_transport->RegisterRtpDemuxerSink(demux_criteria, sink);
+    rtp_demuxer_sink_registered_ = rtp_transport->RegisterRtpDemuxerSink(demux_criteria, sink);
+    return rtp_demuxer_sink_registered_;
   });
 }
 

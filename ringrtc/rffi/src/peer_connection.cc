@@ -21,6 +21,7 @@
 #include "rtc_base/message_digest.h"
 #include "rtc_base/string_encode.h"
 #include "rtc_base/third_party/base64/base64.h"
+#include "system_wrappers/include/field_trial.h"
 
 #include <algorithm>
 #include <string>
@@ -127,7 +128,7 @@ Rust_disableDtlsAndSetSrtpKey(webrtc::SessionDescriptionInterface* session_descr
   }
 
   cricket::CryptoParams crypto_params;
-  crypto_params.cipher_suite = rtc::SrtpCryptoSuiteToName(crypto_suite);
+  crypto_params.crypto_suite = rtc::SrtpCryptoSuiteToName(crypto_suite);
 
   std::string key(key_borrowed, key_len);
   std::string salt(salt_borrowed, salt_len);
@@ -296,6 +297,12 @@ Rust_sessionDescriptionFromV4(bool offer,
   auto opus_red = cricket::CreateAudioCodec(OPUS_RED_PT, cricket::kRedCodecName, 48000, 2);
   opus_red.SetParam("", std::to_string(OPUS_PT) + "/" + std::to_string(OPUS_PT));
 
+  // If the LBRED field trial is enabled, force RED.
+  constexpr char kFieldTrialName[] = "RingRTC-Audio-LBRed-For-Opus";
+  if (field_trial::IsEnabled(kFieldTrialName)) {
+    enable_red_audio = true;
+  }
+
   if (enable_red_audio) {
     // Add RED before Opus to use it by default when sending.
     audio->AddCodec(opus_red);
@@ -407,6 +414,8 @@ Rust_sessionDescriptionFromV4(bool offer,
     // We'll set it around just in case.
     // But everything seems to work fine without it.
     stream->cname = "CNAMECNAMECNAME!";
+
+    stream->set_stream_ids({"s"});
   }
 
   audio->AddStream(audio_stream);
@@ -432,8 +441,7 @@ Rust_sessionDescriptionFromV4(bool offer,
   bundle.AddContentName(video_content_name);
   session->AddGroup(bundle);
 
-  // This is the default and used for "Plan B" SDP, which is what we use in V1, V2, and V3.
-  session->set_msid_signaling(cricket::kMsidSignalingSsrcAttribute);
+  session->set_msid_signaling(cricket::kMsidSignalingMediaSection);
 
   auto typ = offer ? SdpType::kOffer : SdpType::kAnswer;
   return new webrtc::JsepSessionDescription(typ, std::move(session), "1", "1");
@@ -470,7 +478,7 @@ CreateSessionDescriptionForGroupCall(bool local,
 
   // Use SRTP master key material instead
   cricket::CryptoParams crypto_params;
-  crypto_params.cipher_suite = rtc::SrtpCryptoSuiteToName(srtp_key.suite);
+  crypto_params.crypto_suite = rtc::SrtpCryptoSuiteToName(srtp_key.suite);
   std::string key(srtp_key.key_borrowed, srtp_key.key_len);
   std::string salt(srtp_key.salt_borrowed, srtp_key.salt_len);
   crypto_params.key_params = "inline:" + rtc::Base64::Encode(key + salt);

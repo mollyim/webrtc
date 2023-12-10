@@ -80,7 +80,6 @@
 #include "rtc_base/rtc_certificate.h"
 #include "rtc_base/ssl_certificate.h"
 #include "rtc_base/ssl_stream_adapter.h"
-#include "rtc_base/third_party/sigslot/sigslot.h"
 #include "rtc_base/thread.h"
 #include "rtc_base/thread_annotations.h"
 #include "rtc_base/weak_ptr.h"
@@ -743,11 +742,14 @@ class PeerConnection : public PeerConnectionInternal,
   // Used to gather metrics only the first such state change.
   bool was_ever_connected_ RTC_GUARDED_BY(signaling_thread()) = false;
 
-  // This variable needs to be the last one in the class.
-  rtc::WeakPtrFactory<PeerConnection> weak_factory_;
-
   // RingRTC change to add ICE forking
   rtc::scoped_refptr<webrtc::IceGathererInterface> shared_ice_gatherer_;
+
+  // RingRTC change to receive RTP data
+  bool rtp_demuxer_sink_registered_ = false;
+
+  // This variable needs to be the last one in the class.
+  rtc::WeakPtrFactory<PeerConnection> weak_factory_;
 };
 
 }  // namespace webrtc
