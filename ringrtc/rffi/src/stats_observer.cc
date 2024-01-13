@@ -35,7 +35,7 @@ void StatsObserverRffi::OnStatsDelivered(const rtc::scoped_refptr<const RTCStats
   auto candidate_pair_stats = report->GetStatsOfType<RTCIceCandidatePairStats>();
 
   for (const auto& stat : outbound_stream_stats) {
-    if (*stat->kind == "audio") {
+    if (*stat->kind == "audio" && (*stat->mid == "audio" || absl::StartsWith(*stat->mid, "local-audio"))) {
       AudioSenderStatistics audio_sender = {0};
 
       audio_sender.ssrc = stat->ssrc.ValueOrDefault(0);
@@ -55,12 +55,11 @@ void StatsObserverRffi::OnStatsDelivered(const rtc::scoped_refptr<const RTCStats
         auto audio_source_stat = report->GetAs<RTCAudioSourceStats>(*stat->media_source_id);
         if (audio_source_stat) {
           audio_sender.total_audio_energy = audio_source_stat->total_audio_energy.ValueOrDefault(0.0);
-          audio_sender.echo_likelihood = audio_source_stat->echo_likelihood.ValueOrDefault(0.0);
         }
       }
 
       this->audio_sender_statistics_.push_back(audio_sender);
-    } else if (*stat->kind == "video") {
+    } else if (*stat->kind == "video" && (*stat->mid == "video" || absl::StartsWith(*stat->mid, "local-video"))) {
       VideoSenderStatistics video_sender = {0};
 
       video_sender.ssrc = stat->ssrc.ValueOrDefault(0);
@@ -102,7 +101,7 @@ void StatsObserverRffi::OnStatsDelivered(const rtc::scoped_refptr<const RTCStats
   }
 
   for (const auto& stat : inbound_stream_stats) {
-    if (*stat->kind == "audio") {
+    if (*stat->kind == "audio" && (*stat->mid == "audio" || absl::StartsWith(*stat->mid, "remote-audio"))) {
       AudioReceiverStatistics audio_receiver = {0};
 
       audio_receiver.ssrc = stat->ssrc.ValueOrDefault(0);
@@ -115,7 +114,7 @@ void StatsObserverRffi::OnStatsDelivered(const rtc::scoped_refptr<const RTCStats
       audio_receiver.jitter_buffer_emitted_count = stat->jitter_buffer_emitted_count.ValueOrDefault(0);
 
       this->audio_receiver_statistics_.push_back(audio_receiver);
-    } else if (*stat->kind == "video") {
+    } else if (*stat->kind == "video" && (*stat->mid == "video" || absl::StartsWith(*stat->mid, "remote-video"))) {
       VideoReceiverStatistics video_receiver = {0};
 
       video_receiver.ssrc = stat->ssrc.ValueOrDefault(0);
