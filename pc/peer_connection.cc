@@ -434,6 +434,7 @@ bool PeerConnectionInterface::RTCConfiguration::operator==(
   // Note: Order matters! Fields must be ordered the same as RTCConfiguration.
   struct stuff_being_tested_for_equality {
     IceServers servers;
+    webrtc::ProxyInfo proxy_info;
     IceTransportsType type;
     BundlePolicy bundle_policy;
     RtcpMuxPolicy rtcp_mux_policy;
