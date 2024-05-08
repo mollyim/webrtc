@@ -370,6 +370,13 @@ void TurnPort::PrepareAddress() {
     return;
   }
   if (server_address_.address.IsUnresolvedIP()) {
+    if (proxy().type != webrtc::PROXY_NONE) {
+      if (!CreateTurnClientSocket()) {
+        OnAllocateError(STUN_ERROR_SERVER_NOT_REACHABLE,
+                        "TURN host lookup received error.");
+      }
+      return;
+    }
     ResolveTurnAddress(server_address_.address);
   } else {
     // If protocol family of server address doesn't match with local, return.
