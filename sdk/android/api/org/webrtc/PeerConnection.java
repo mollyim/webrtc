@@ -369,6 +369,96 @@ public class PeerConnection {
     }
   }
 
+  /** Java version of rtc::ProxyInfo */
+  public static class ProxyInfo {
+    public final String hostname;
+    public final int port;
+    public final String username;
+    public final String password;
+
+    public final ProxyType type;
+
+    private ProxyInfo(String hostname, int port, String username, String password,
+        ProxyType type) {
+      this.hostname = hostname;
+      this.port = port;
+      this.username = username;
+      this.password = password;
+      this.type = type;
+    }
+
+    public static Builder builder(String hostname, int port) {
+      return new Builder(hostname, port);
+    }
+
+    public static class Builder {
+      private String hostname = "";
+      private int port;
+      private ProxyType type = ProxyType.PROXY_HTTPS;
+      private String username = "";
+      private String password = "";
+
+      private Builder(String hostname, int port) {
+        if (hostname == null || hostname.isEmpty()) {
+          throw new IllegalArgumentException("hostname == null || hostname.isEmpty()");
+        }
+        this.hostname = hostname;
+        this.port = port;
+      }
+
+      public Builder setProxyType(ProxyType type) {
+        this.type = type;
+        return this;
+      }
+
+      public Builder setUsername(String username) {
+        this.username = username;
+        return this;
+      }
+
+      public Builder setPassword(String password) {
+        this.password = password;
+        return this;
+      }
+
+      public ProxyInfo createProxyInfo() {
+        return new ProxyInfo(hostname, port, username, password, type);
+      }
+    }
+
+    @Nullable
+    @CalledByNative("ProxyInfo")
+    String getHostname() {
+      return hostname;
+    }
+
+    @CalledByNative("ProxyInfo")
+    int getPort() {
+      return port;
+    }
+
+    @Nullable
+    @CalledByNative("ProxyInfo")
+    String getUsername() {
+      return username;
+    }
+
+    @Nullable
+    @CalledByNative("ProxyInfo")
+    String getPassword() {
+      return password;
+    }
+
+    @Nullable
+    @CalledByNative("ProxyInfo")
+    ProxyType getProxyType() {
+      return type;
+    }
+  }
+
+  /** Java version of rtc::ProxyType */
+  public enum ProxyType { PROXY_NONE, PROXY_HTTPS, PROXY_SOCKS5, PROXY_UNKNOWN }
+
   /** Java version of PeerConnectionInterface.IceTransportsType */
   public enum IceTransportsType { NONE, RELAY, NOHOST, ALL }
 
@@ -461,6 +551,7 @@ public class PeerConnection {
   public static class RTCConfiguration {
     public IceTransportsType iceTransportsType;
     public List<IceServer> iceServers;
+    public ProxyInfo proxyInfo;
     public BundlePolicy bundlePolicy;
     @Nullable public RtcCertificatePem certificate;
     public RtcpMuxPolicy rtcpMuxPolicy;
@@ -579,6 +670,7 @@ public class PeerConnection {
       tcpCandidatePolicy = TcpCandidatePolicy.ENABLED;
       candidateNetworkPolicy = CandidateNetworkPolicy.ALL;
       this.iceServers = iceServers;
+      proxyInfo = null;
       audioJitterBufferMaxPackets = 50;
       // RingRTC change to configure the jitter buffer's max target delay.
       audioJitterBufferMaxTargetDelayMs = 500;
@@ -622,6 +714,11 @@ public class PeerConnection {
     @CalledByNative("RTCConfiguration")
     List<IceServer> getIceServers() {
       return iceServers;
+    }
+
+    @CalledByNative("RTCConfiguration")
+    ProxyInfo getProxyInfo() {
+      return proxyInfo;
     }
 
     @CalledByNative("RTCConfiguration")
