@@ -111,6 +111,53 @@ PeerConnectionInterface::IceServers JavaToNativeIceServers(
   return ice_servers;
 }
 
+webrtc::ProxyType JavaToNativeProxyType(
+    JNIEnv* jni,
+    const jni_zero::JavaRef<jobject>& j_proxy_type) {
+  std::string enum_name = GetJavaEnumName(jni, j_proxy_type);
+
+  if (enum_name == "PROXY_NONE") {
+    return webrtc::PROXY_NONE;
+  }
+  if (enum_name == "PROXY_HTTPS") {
+    return webrtc::PROXY_HTTPS;
+  }
+  if (enum_name == "PROXY_SOCKS5") {
+    return webrtc::PROXY_SOCKS5;
+  }
+
+  RTC_CHECK(false) << " Unexpected ProxyType enum name " << enum_name;
+
+  return webrtc::PROXY_NONE;
+}
+
+webrtc::ProxyInfo JavaToNativeProxyInfo(
+    JNIEnv* jni,
+    const jni_zero::JavaRef<jobject>& j_proxy_info) {
+  webrtc::ProxyInfo proxy_info;
+  InsecureCryptStringImpl pass;
+
+  jni_zero::ScopedJavaLocalRef<jstring> hostname =
+      Java_ProxyInfo_getHostname(jni, j_proxy_info);
+  jni_zero::ScopedJavaLocalRef<jstring> username =
+      Java_ProxyInfo_getUsername(jni, j_proxy_info);
+  jni_zero::ScopedJavaLocalRef<jstring> password =
+      Java_ProxyInfo_getPassword(jni, j_proxy_info);
+  jni_zero::ScopedJavaLocalRef<jobject> proxy_type =
+      Java_ProxyInfo_getProxyType(jni, j_proxy_info);
+
+  int port = Java_ProxyInfo_getPort(jni, j_proxy_info);
+
+  proxy_info.address = SocketAddress(
+      JavaToNativeString(jni, hostname), port);
+  proxy_info.username = JavaToNativeString(jni, username);
+  pass.password() = JavaToNativeString(jni, password);
+  proxy_info.password = CryptString(pass);
+  proxy_info.type = JavaToNativeProxyType(jni, proxy_type);
+
+  return proxy_info;
+}
+
 SdpSemantics JavaToNativeSdpSemantics(
     JNIEnv* jni,
     const jni_zero::JavaRef<jobject>& j_sdp_semantics) {
@@ -163,6 +210,8 @@ void JavaToNativeRTCConfiguration(
       Java_RTCConfiguration_getCandidateNetworkPolicy(jni, j_rtc_config);
   jni_zero::ScopedJavaLocalRef<jobject> j_ice_servers =
       Java_RTCConfiguration_getIceServers(jni, j_rtc_config);
+  jni_zero::ScopedJavaLocalRef<jobject> j_proxy_info =
+      Java_RTCConfiguration_getProxyInfo(jni, j_rtc_config);
   jni_zero::ScopedJavaLocalRef<jobject> j_continual_gathering_policy =
       Java_RTCConfiguration_getContinualGatheringPolicy(jni, j_rtc_config);
   jni_zero::ScopedJavaLocalRef<jobject> j_turn_port_prune_policy =
@@ -191,6 +240,9 @@ void JavaToNativeRTCConfiguration(
   rtc_config->candidate_network_policy =
       JavaToNativeCandidateNetworkPolicy(jni, j_candidate_network_policy);
   rtc_config->servers = JavaToNativeIceServers(jni, j_ice_servers);
+  if (!j_proxy_info.is_null()) {
+      rtc_config->proxy_info = JavaToNativeProxyInfo(jni, j_proxy_info);
+  }
   rtc_config->audio_jitter_buffer_max_packets =
       Java_RTCConfiguration_getAudioJitterBufferMaxPackets(jni, j_rtc_config);
   // RingRTC change to configure the jitter buffer's max target delay.
