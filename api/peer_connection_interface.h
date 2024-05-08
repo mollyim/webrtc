@@ -141,6 +141,7 @@
 #include "rtc_base/ssl_certificate.h"
 #include "rtc_base/ssl_stream_adapter.h"
 #include "rtc_base/system/rtc_export.h"
+#include "rtc_base/proxy_info.h"
 #include "rtc_base/thread.h"
 
 namespace rtc {
@@ -430,6 +431,7 @@ class RTC_EXPORT PeerConnectionInterface : public webrtc::RefCountInterface {
     // TODO(pthatcher): Rename this ice_servers, but update Chromium
     // at the same time.
     IceServers servers;
+    rtc::ProxyInfo proxy_info;
     // TODO(pthatcher): Rename this ice_transport_type, but update
     // Chromium at the same time.
     IceTransportsType type = kAll;
