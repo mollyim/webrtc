@@ -255,6 +255,10 @@ PeerConnectionFactory::CreatePeerConnectionOrError(
         port_allocator_flags);
   }
 
+ if (dependencies.allocator) {
+    dependencies.allocator->set_proxy("", configuration.proxy_info);
+  }
+
   if (!dependencies.ice_transport_factory) {
     dependencies.ice_transport_factory =
         std::make_unique<DefaultIceTransportFactory>();
