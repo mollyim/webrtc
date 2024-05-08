@@ -362,6 +362,13 @@ void TurnPort::PrepareAddress() {
     return;
   }
   if (server_address_.address.IsUnresolvedIP()) {
+    if (proxy().type != rtc::PROXY_NONE) {
+      if (!CreateTurnClientSocket()) {
+        OnAllocateError(SERVER_NOT_REACHABLE_ERROR,
+                        "TURN host lookup received error.");
+      }
+      return;
+    }
     ResolveTurnAddress(server_address_.address);
   } else {
     // If protocol family of server address doesn't match with local, return.
