@@ -118,6 +118,7 @@ specific_include_rules = {
     "+rtc_base/socket_address.h",
     "+rtc_base/ssl_certificate.h",
     "+rtc_base/ssl_stream_adapter.h",
+    "+rtc_base/proxy_info.h",
     "+rtc_base/thread.h",
   ],
 
