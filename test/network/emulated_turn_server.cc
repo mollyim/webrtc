@@ -69,6 +69,8 @@ class PacketSocketFactoryWrapper : public webrtc::PacketSocketFactory {
       const webrtc::Environment& env,
       const webrtc::SocketAddress& local_address,
       const webrtc::SocketAddress& remote_address,
+      const rtc::ProxyInfo& proxy_info,
+      const std::string& user_agent,
       const webrtc::PacketSocketTcpOptions& tcp_options) override {
     return nullptr;
   }

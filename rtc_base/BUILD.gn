@@ -1301,6 +1301,7 @@ rtc_library("socket_adapters") {
     ":byte_buffer",
     ":checks",
     ":crypt_string",
+    ":http_common",
     ":logging",
     ":socket",
     ":socket_address",
@@ -1460,6 +1461,18 @@ rtc_library("mdns_responder_interface") {
 
 rtc_library("dscp") {
   sources = [ "dscp.h" ]
+}
+
+rtc_library("proxy_info") {
+  visibility = [ "*" ]
+  sources = [
+    "proxy_info.cc",
+    "proxy_info.h",
+  ]
+  deps = [
+    ":crypt_string",
+    ":socket_address",
+  ]
 }
 
 rtc_library("file_rotating_stream") {
@@ -1734,6 +1747,24 @@ rtc_library("crypt_string") {
     "crypt_string.cc",
     "crypt_string.h",
   ]
+}
+
+rtc_library("http_common") {
+  sources = [
+    "http_common.cc",
+    "http_common.h",
+  ]
+  deps = [
+    ":crypt_string",
+    ":logging",
+    ":socket_address",
+    ":ssl",
+    ":stringutils",
+    ":zero_memory",
+    "third_party/base64",
+  ]
+
+  absl_deps = [ "//third_party/abseil-cpp/absl/strings" ]
 }
 
 rtc_source_set("gtest_prod") {
@@ -2283,6 +2314,7 @@ if (rtc_include_tests) {
         "network_route_unittest.cc",
         "network_unittest.cc",
         "openssl_stream_adapter_unittest.cc",
+        "proxy_unittest.cc",
         "rolling_accumulator_unittest.cc",
         "rtc_certificate_generator_unittest.cc",
         "rtc_certificate_unittest.cc",

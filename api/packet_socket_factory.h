@@ -20,6 +20,7 @@
 #include "api/environment/environment.h"
 #include "rtc_base/async_packet_socket.h"
 #include "rtc_base/checks.h"
+#include "rtc_base/proxy_info.h"
 #include "rtc_base/socket_address.h"
 #include "rtc_base/ssl_certificate.h"
 #include "rtc_base/system/rtc_export.h"
@@ -81,6 +82,8 @@ class RTC_EXPORT PacketSocketFactory {
       const Environment& env,
       const SocketAddress& local_address,
       const SocketAddress& remote_address,
+      const ProxyInfo& proxy_info,
+      const std::string& user_agent,
       const PacketSocketTcpOptions& tcp_options) = 0;
 
   virtual std::unique_ptr<AsyncDnsResolverInterface>

@@ -18,6 +18,7 @@
 #include "api/environment/environment.h"
 #include "api/packet_socket_factory.h"
 #include "rtc_base/async_packet_socket.h"
+#include "rtc_base/proxy_info.h"
 #include "rtc_base/socket.h"
 #include "rtc_base/socket_address.h"
 #include "rtc_base/socket_factory.h"
@@ -45,6 +46,8 @@ class RTC_EXPORT BasicPacketSocketFactory : public PacketSocketFactory {
       const Environment& env,
       const SocketAddress& local_address,
       const SocketAddress& remote_address,
+      const ProxyInfo& proxy_info,
+      const std::string& user_agent,
       const PacketSocketTcpOptions& tcp_options) override;
 
   std::unique_ptr<AsyncDnsResolverInterface> CreateAsyncDnsResolver() override;
