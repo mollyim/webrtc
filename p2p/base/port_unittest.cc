@@ -1171,6 +1171,8 @@ class FakePacketSocketFactory : public webrtc::PacketSocketFactory {
   AsyncPacketSocket* CreateClientTcpSocket(
       const SocketAddress& local_address,
       const SocketAddress& remote_address,
+      const rtc::ProxyInfo& proxy_info,
+      const std::string& user_agent,
       const webrtc::PacketSocketTcpOptions& opts) override {
     EXPECT_TRUE(next_client_tcp_socket_.has_value());
     AsyncPacketSocket* result = *next_client_tcp_socket_;

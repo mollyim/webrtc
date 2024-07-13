@@ -507,8 +507,8 @@ bool TurnPort::CreateTurnClientSocket() {
     tcp_options.tls_elliptic_curves = tls_elliptic_curves_;
     tcp_options.tls_cert_verifier = tls_cert_verifier_;
     socket_ = socket_factory()->CreateClientTcpSocket(
-        webrtc::SocketAddress(Network()->GetBestIP(), 0),
-        server_address_.address, tcp_options);
+        webrtc::SocketAddress(Network()->GetBestIP(), 0), server_address_.address,
+        rtc::ProxyInfo(), std::string(), tcp_options);
   }
 
   if (!socket_) {
