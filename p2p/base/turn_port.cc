@@ -441,7 +441,7 @@ bool TurnPort::CreateTurnClientSocket() {
     tcp_options.tls_cert_verifier = tls_cert_verifier_;
     socket_ = socket_factory()->CreateClientTcpSocket(
         SocketAddress(Network()->GetBestIP(), 0), server_address_.address,
-        rtc::ProxyInfo(), std::string(), tcp_options);
+        proxy(), user_agent(), tcp_options);
   }
 
   if (!socket_) {
