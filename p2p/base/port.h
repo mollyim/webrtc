@@ -314,6 +314,21 @@ class RTC_EXPORT Port : public webrtc::PortInterface,
       const webrtc::SocketAddress& addr,
       const std::vector<uint16_t>& unknown_types);
 
+  [[deprecated]] void set_proxy(absl::string_view user_agent,
+                                const webrtc::ProxyInfo& proxy) {
+    RTC_DCHECK_NOTREACHED();
+    user_agent_ = std::string(user_agent);
+    proxy_ = proxy;
+  }
+  [[deprecated]] const std::string& user_agent() override {
+    RTC_DCHECK_NOTREACHED();
+    return user_agent_;
+  }
+  [[deprecated]] const webrtc::ProxyInfo& proxy() override {
+    RTC_DCHECK_NOTREACHED();
+    return proxy_;
+  }
+
   void EnablePortPackets() override;
 
   // Called if the port has no connections and is no longer useful.
@@ -484,6 +499,9 @@ class RTC_EXPORT Port : public webrtc::PortInterface,
   IceRole ice_role_;
   uint64_t tiebreaker_;
   bool shared_socket_;
+  // Information to use when going through a proxy.
+  std::string user_agent_;
+  webrtc::ProxyInfo proxy_;
 
   // A virtual cost perceived by the user, usually based on the network type
   // (WiFi. vs. Cellular). It takes precedence over the priority when
