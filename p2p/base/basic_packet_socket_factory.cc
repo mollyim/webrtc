@@ -98,6 +98,8 @@ BasicPacketSocketFactory::CreateClientTcpSocket(
     const Environment& env,
     const SocketAddress& local_address,
     const SocketAddress& remote_address,
+    const ProxyInfo& proxy_info,
+    const std::string& user_agent,
     const PacketSocketTcpOptions& tcp_options) {
   std::unique_ptr<Socket> socket =
       socket_factory_->Create(local_address.family(), SOCK_STREAM);
@@ -128,6 +130,15 @@ BasicPacketSocketFactory::CreateClientTcpSocket(
   if (socket->SetOption(Socket::OPT_NODELAY, 1) != 0) {
     RTC_LOG(LS_ERROR) << "Setting TCP_NODELAY option failed with error "
                       << socket->GetError();
+  }
+
+  // If using a proxy, wrap the socket in a proxy socket.
+  if (proxy_info.type == PROXY_SOCKS5) {
+    socket = absl::WrapUnique(new AsyncSocksProxySocket(
+        socket.release(), proxy_info.address, proxy_info.username, proxy_info.password));
+  } else if (proxy_info.type == PROXY_HTTPS) {
+    socket = absl::WrapUnique(new AsyncHttpsProxySocket(
+        socket.release(), user_agent, proxy_info.address, proxy_info.username, proxy_info.password));
   }
 
   // Assert that at most one TLS option is used.

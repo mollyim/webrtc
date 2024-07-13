@@ -973,6 +973,8 @@ void BasicPortAllocatorSession::AddAllocatedPort(Port* port,
   RTC_LOG(LS_INFO) << "Adding allocated port for " << content_name();
   port->set_component(component());
   port->set_generation(generation());
+  if (allocator_->proxy().type != webrtc::PROXY_NONE)
+    port->set_proxy(allocator_->user_agent(), allocator_->proxy());
   port->set_send_retransmit_count_attribute(
       (flags() & PORTALLOCATOR_ENABLE_STUN_RETRANSMIT_ATTRIBUTE) != 0);
 

@@ -42,6 +42,7 @@
 #include "rtc_base/network.h"
 #include "rtc_base/network/received_packet.h"
 #include "rtc_base/network/sent_packet.h"
+#include "rtc_base/proxy_info.h"
 #include "rtc_base/socket_address.h"
 #include "rtc_base/system/rtc_export.h"
 #include "rtc_base/third_party/sigslot/sigslot.h"
@@ -344,6 +345,13 @@ class RTC_EXPORT Port : public PortInterface, public sigslot::has_slots<> {
       const SocketAddress& addr,
       const std::vector<uint16_t>& unknown_types);
 
+  void set_proxy(absl::string_view user_agent, const webrtc::ProxyInfo& proxy) {
+    user_agent_ = std::string(user_agent);
+    proxy_ = proxy;
+  }
+  const std::string& user_agent() override { return user_agent_; }
+  const webrtc::ProxyInfo& proxy() override { return proxy_; }
+
   void EnablePortPackets() override;
 
   // Called if the port has no connections and is no longer useful.
@@ -575,6 +583,9 @@ class RTC_EXPORT Port : public PortInterface, public sigslot::has_slots<> {
   IceRole ice_role_ RTC_GUARDED_BY(thread_);
   uint64_t tiebreaker_ RTC_GUARDED_BY(thread_);
   bool shared_socket_ RTC_GUARDED_BY(thread_);
+  // Information to use when going through a proxy.
+  std::string user_agent_;
+  webrtc::ProxyInfo proxy_;
 
   // A virtual cost perceived by the user, usually based on the network type
   // (WiFi. vs. Cellular). It takes precedence over the priority when
