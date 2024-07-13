@@ -314,17 +314,16 @@ class RTC_EXPORT Port : public webrtc::PortInterface,
       const webrtc::SocketAddress& addr,
       const std::vector<uint16_t>& unknown_types);
 
-  [[deprecated]] void set_proxy(absl::string_view user_agent,
-                                const webrtc::ProxyInfo& proxy) {
+  void set_proxy(absl::string_view user_agent, const webrtc::ProxyInfo& proxy) {
     RTC_DCHECK_NOTREACHED();
     user_agent_ = std::string(user_agent);
     proxy_ = proxy;
   }
-  [[deprecated]] const std::string& user_agent() override {
+  const std::string& user_agent() override {
     RTC_DCHECK_NOTREACHED();
     return user_agent_;
   }
-  [[deprecated]] const webrtc::ProxyInfo& proxy() override {
+  const webrtc::ProxyInfo& proxy() override {
     RTC_DCHECK_NOTREACHED();
     return proxy_;
   }
