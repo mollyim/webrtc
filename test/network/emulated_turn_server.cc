@@ -71,6 +71,8 @@ class PacketSocketFactoryWrapper : public PacketSocketFactory {
       const Environment& env,
       const SocketAddress& local_address,
       const SocketAddress& remote_address,
+      const rtc::ProxyInfo& proxy_info,
+      const std::string& user_agent,
       const PacketSocketTcpOptions& tcp_options) override {
     return nullptr;
   }
