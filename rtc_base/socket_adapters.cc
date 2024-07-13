@@ -19,6 +19,7 @@
 #include "api/array_view.h"
 #include "rtc_base/async_socket.h"
 #include "rtc_base/checks.h"
+#include "rtc_base/http_common.h"
 #include "rtc_base/logging.h"
 #include "rtc_base/socket.h"
 #include "rtc_base/socket_address.h"
