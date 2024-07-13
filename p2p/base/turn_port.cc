@@ -486,7 +486,7 @@ bool TurnPort::CreateTurnClientSocket() {
     tcp_options.tls_cert_verifier = tls_cert_verifier_;
     owned_socket_ = socket_factory()->CreateClientTcpSocket(
         env(), SocketAddress(Network()->GetBestIP(), 0),
-        server_address_.address, tcp_options);
+        server_address_.address, proxy(), user_agent(), tcp_options);
     socket_ = owned_socket_.get();
   }
 

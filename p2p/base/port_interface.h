@@ -30,6 +30,7 @@
 #include "p2p/base/transport_description.h"
 #include "rtc_base/async_packet_socket.h"
 #include "rtc_base/dscp.h"
+#include "rtc_base/proxy_info.h"
 #include "rtc_base/net_helper.h"
 #include "rtc_base/network.h"
 #include "rtc_base/network/sent_packet.h"
@@ -227,6 +228,8 @@ class PortInterface {
 
   // The factory used to create the sockets of this port.
   virtual PacketSocketFactory* socket_factory() const = 0;
+  virtual const std::string& user_agent() = 0;
+  virtual const webrtc::ProxyInfo& proxy() = 0;
 
   // Identifies the generation that this port was created in.
   virtual uint32_t generation() const = 0;

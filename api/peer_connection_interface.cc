@@ -121,6 +121,7 @@ bool PeerConnectionInterface::RTCConfiguration::operator==(
   // Note: Order matters! Fields must be ordered the same as RTCConfiguration.
   struct stuff_being_tested_for_equality {
     IceServers servers;
+    webrtc::ProxyInfo proxy_info;
     IceTransportsType type;
     BundlePolicy bundle_policy;
     RtcpMuxPolicy rtcp_mux_policy;
@@ -174,6 +175,8 @@ bool PeerConnectionInterface::RTCConfiguration::operator==(
                 "Did you add something to RTCConfiguration and forget to "
                 "update operator==?");
   return type == o.type && servers == o.servers &&
+         proxy_info.type == o.proxy_info.type &&
+         proxy_info.address == o.proxy_info.address &&
          bundle_policy == o.bundle_policy &&
          rtcp_mux_policy == o.rtcp_mux_policy &&
          tcp_candidate_policy == o.tcp_candidate_policy &&

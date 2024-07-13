@@ -165,4 +165,8 @@ void ProxyBinding::Destroy() {
   NotifyDestroyed(this);
 }
 
+AsyncProxyServerSocket* SocksProxyServer::WrapSocket(Socket* socket) {
+  return new AsyncSocksProxyServerSocket(socket);
+}
+
 }  // namespace webrtc
