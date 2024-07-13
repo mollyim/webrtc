@@ -49,6 +49,8 @@ class PacketSocketFactoryWrapper : public rtc::PacketSocketFactory {
   rtc::AsyncPacketSocket* CreateClientTcpSocket(
       const rtc::SocketAddress& local_address,
       const rtc::SocketAddress& remote_address,
+      const rtc::ProxyInfo& proxy_info,
+      const std::string& user_agent,
       const rtc::PacketSocketTcpOptions& tcp_options) override {
     return nullptr;
   }
