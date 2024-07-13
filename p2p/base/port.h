@@ -319,17 +319,16 @@ class RTC_EXPORT Port : public PortInterface, public sigslot::has_slots<> {
       const rtc::SocketAddress& addr,
       const std::vector<uint16_t>& unknown_types);
 
-  [[deprecated]] void set_proxy(absl::string_view user_agent,
-                                const rtc::ProxyInfo& proxy) {
+  void set_proxy(absl::string_view user_agent, const rtc::ProxyInfo& proxy) {
     RTC_DCHECK_NOTREACHED();
     user_agent_ = std::string(user_agent);
     proxy_ = proxy;
   }
-  [[deprecated]] const std::string& user_agent() override {
+  const std::string& user_agent() override {
     RTC_DCHECK_NOTREACHED();
     return user_agent_;
   }
-  [[deprecated]] const rtc::ProxyInfo& proxy() override {
+  const rtc::ProxyInfo& proxy() override {
     RTC_DCHECK_NOTREACHED();
     return proxy_;
   }
