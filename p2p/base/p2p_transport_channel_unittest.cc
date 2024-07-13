@@ -153,6 +153,12 @@ const SocketAddress kAlternateAddrs[2] = {SocketAddress("101.101.101.101", 0),
 const SocketAddress kIPv6AlternateAddrs[2] = {
     SocketAddress("2401:4030:1:2c00:be30:abcd:efab:cdef", 0),
     SocketAddress("2601:0:1000:1b03:2e41:38ff:fea6:f2a4", 0)};
+// Addresses for HTTP proxy servers.
+static const SocketAddress kHttpsProxyAddrs[2] = {
+    SocketAddress("11.11.11.1", 443), SocketAddress("22.22.22.1", 443)};
+// Addresses for SOCKS proxy servers.
+static const SocketAddress kSocksProxyAddrs[2] = {
+    SocketAddress("11.11.11.1", 1080), SocketAddress("22.22.22.1", 1080)};
 // Internal addresses for NAT boxes.
 const SocketAddress kNatAddrs[2] = {SocketAddress("192.168.1.1", 0),
                                     SocketAddress("192.168.2.1", 0)};
@@ -356,6 +362,7 @@ class P2PTransportChannelTestBase : public ::testing::Test,
     BLOCK_UDP,                    // Firewall, UDP in/out blocked
     BLOCK_UDP_AND_INCOMING_TCP,   // Firewall, UDP in/out and TCP in blocked
     BLOCK_ALL_BUT_OUTGOING_HTTP,  // Firewall, only TCP out on 80/443
+    PROXY_HTTPS,                  // All traffic through HTTPS proxy
     NUM_CONFIGS
   };
 
@@ -598,6 +605,13 @@ class P2PTransportChannelTestBase : public ::testing::Test,
   void RemoveAddress(int endpoint, const SocketAddress& addr) {
     GetEndpoint(endpoint)->network_manager_.RemoveInterface(addr);
     fw()->AddRule(false, FP_ANY, FD_ANY, addr);
+  }
+  void SetProxy(int endpoint, rtc::ProxyType type) {
+    rtc::ProxyInfo info;
+    info.type = type;
+    info.address = (type == rtc::PROXY_HTTPS) ? kHttpsProxyAddrs[endpoint]
+                                              : kSocksProxyAddrs[endpoint];
+    GetAllocator(endpoint)->set_proxy("unittest/1.0", info);
   }
   void SetAllocatorFlags(int endpoint, int flags) {
     GetAllocator(endpoint)->set_flags(flags);
@@ -1199,6 +1213,7 @@ class P2PTransportChannelTest : public P2PTransportChannelTestBase {
       case BLOCK_UDP:
       case BLOCK_UDP_AND_INCOMING_TCP:
       case BLOCK_ALL_BUT_OUTGOING_HTTP:
+      case PROXY_HTTPS:
         AddAddress(endpoint, kPublicAddrs[endpoint]);
         // Block all UDP
         fw()->AddRule(false, FP_UDP, FD_ANY, kPublicAddrs[endpoint]);
@@ -1212,6 +1227,13 @@ class P2PTransportChannelTest : public P2PTransportChannelTestBase {
           fw()->AddRule(true, FP_TCP, kPublicAddrs[endpoint],
                         SocketAddress(IPAddress(INADDR_ANY), 443));
           fw()->AddRule(false, FP_TCP, FD_ANY, kPublicAddrs[endpoint]);
+        } else if (config == PROXY_HTTPS) {
+          // Block all TCP to/from the endpoint except to the proxy server
+          fw()->AddRule(true, FP_TCP, kPublicAddrs[endpoint],
+                        kHttpsProxyAddrs[endpoint]);
+          fw()->AddRule(false, FP_TCP, rtc::FD_ANY,
+                        kPublicAddrs[endpoint]);
+          SetProxy(endpoint, PROXY_HTTPS);
         }
         break;
       default:
@@ -1249,32 +1271,35 @@ class P2PTransportChannelMatrixTest : public P2PTransportChannelTest,
 // Test matrix. Originator behavior defined by rows, receiever by columns.
 
 // TODO(?): Fix NULLs caused by lack of TCP support in NATSocket.
+// TODO(?): Fix NULLs caused by no HTTP proxy support.
 // TODO(?): Rearrange rows/columns from best to worst.
 const P2PTransportChannelMatrixTest::Result*
     P2PTransportChannelMatrixTest::kMatrix[NUM_CONFIGS][NUM_CONFIGS] = {
-        // OPEN  CONE  ADDR  PORT  SYMM  2CON  SCON  !UDP  !TCP  HTTP
+        //      OPEN  CONE  ADDR  PORT  SYMM  2CON  SCON  !UDP  !TCP  HTTP  PRXH
         /*OP*/
-        {LULU, LUSU, LUSU, LUSU, LUPU, LUSU, LUPU, LTPT, LTPT, LSRS},
+        {LULU, LUSU, LUSU, LUSU, LUPU, LUSU, LUPU, LTPT, LTPT, LSRS, nullptr},
         /*CO*/
-        {SULU, SUSU, SUSU, SUSU, SUPU, SUSU, SUPU, nullptr, nullptr, LSRS},
+        {SULU, SUSU, SUSU, SUSU, SUPU, SUSU, SUPU, nullptr, nullptr, LSRS, nullptr},
         /*AD*/
-        {SULU, SUSU, SUSU, SUSU, SUPU, SUSU, SUPU, nullptr, nullptr, LSRS},
+        {SULU, SUSU, SUSU, SUSU, SUPU, SUSU, SUPU, nullptr, nullptr, LSRS, nullptr},
         /*PO*/
-        {SULU, SUSU, SUSU, SUSU, RUPU, SUSU, RUPU, nullptr, nullptr, LSRS},
+        {SULU, SUSU, SUSU, SUSU, RUPU, SUSU, RUPU, nullptr, nullptr, LSRS, nullptr},
         /*SY*/
-        {PULU, PUSU, PUSU, PURU, PURU, PUSU, PURU, nullptr, nullptr, LSRS},
+        {PULU, PUSU, PUSU, PURU, PURU, PUSU, PURU, nullptr, nullptr, LSRS, nullptr},
         /*2C*/
-        {SULU, SUSU, SUSU, SUSU, SUPU, SUSU, SUPU, nullptr, nullptr, LSRS},
+        {SULU, SUSU, SUSU, SUSU, SUPU, SUSU, SUPU, nullptr, nullptr, LSRS, nullptr},
         /*SC*/
-        {PULU, PUSU, PUSU, PURU, PURU, PUSU, PURU, nullptr, nullptr, LSRS},
+        {PULU, PUSU, PUSU, PURU, PURU, PUSU, PURU, nullptr, nullptr, LSRS, nullptr},
         /*!U*/
         {LTPT, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, LTPT, LTPT,
-         LSRS},
+         LSRS, nullptr},
         /*!T*/
         {PTLT, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, PTLT, LTRT,
-         LSRS},
+         LSRS, nullptr},
         /*HT*/
-        {LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS},
+        {LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, nullptr},
+        /*PR*/
+        {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
 };
 
 // The actual tests that exercise all the various configurations.
@@ -1303,7 +1328,8 @@ const P2PTransportChannelMatrixTest::Result*
   P2P_TEST(x, NAT_SYMMETRIC_THEN_CONE)    \
   P2P_TEST(x, BLOCK_UDP)                  \
   P2P_TEST(x, BLOCK_UDP_AND_INCOMING_TCP) \
-  P2P_TEST(x, BLOCK_ALL_BUT_OUTGOING_HTTP)
+  P2P_TEST(x, BLOCK_ALL_BUT_OUTGOING_HTTP)\
+  P2P_TEST(x, PROXY_HTTPS)
 
 P2P_TEST_SET(OPEN)
 P2P_TEST_SET(NAT_FULL_CONE)
@@ -1315,6 +1341,7 @@ P2P_TEST_SET(NAT_SYMMETRIC_THEN_CONE)
 P2P_TEST_SET(BLOCK_UDP)
 P2P_TEST_SET(BLOCK_UDP_AND_INCOMING_TCP)
 P2P_TEST_SET(BLOCK_ALL_BUT_OUTGOING_HTTP)
+P2P_TEST_SET(PROXY_HTTPS)
 
 INSTANTIATE_TEST_SUITE_P(
     All,
