@@ -331,6 +331,8 @@ class InjectableNetworkImpl : public InjectableNetwork,
   AsyncPacketSocket* CreateClientTcpSocket(
       const SocketAddress& local_address,
       const SocketAddress& remote_address,
+      const ProxyInfo& proxy_info,
+      const std::string& user_agent,
       const PacketSocketTcpOptions& tcp_options) override {
     // TODO: Support TCP for TURN
     return nullptr;
