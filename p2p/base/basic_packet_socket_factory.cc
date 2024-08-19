@@ -127,7 +127,11 @@ AsyncPacketSocket* BasicPacketSocketFactory::CreateClientTcpSocket(
                       << socket->GetError();
   }
 
-  if (proxy_info.type == PROXY_HTTPS) {
+  // If using a proxy, wrap the socket in a proxy socket.
+  if (proxy_info.type == PROXY_SOCKS5) {
+    socket = new AsyncSocksProxySocket(
+        socket, proxy_info.address, proxy_info.username, proxy_info.password);
+  } else if (proxy_info.type == PROXY_HTTPS) {
     socket =
         new AsyncHttpsProxySocket(socket, user_agent, proxy_info.address,
                                   proxy_info.username, proxy_info.password);

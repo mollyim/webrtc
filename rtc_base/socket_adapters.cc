@@ -16,8 +16,10 @@
 #include <cstdint>
 #include <cstring>
 
+#include "absl/strings/match.h"
 #include "api/array_view.h"
 #include "rtc_base/async_socket.h"
+#include "rtc_base/byte_buffer.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/http_common.h"
 #include "rtc_base/logging.h"
@@ -341,7 +343,7 @@ bool AsyncHttpsProxySocket::ShouldIssueConnect() const {
 }
 
 void AsyncHttpsProxySocket::SendRequest() {
-  rtc::StringBuilder ss;
+  StringBuilder ss;
   ss << "CONNECT " << dest_.ToString() << " HTTP/1.0\r\n";
   ss << "User-Agent: " << agent_ << "\r\n";
   ss << "Host: " << dest_.HostAsURIString() << "\r\n";
@@ -464,6 +466,200 @@ void AsyncHttpsProxySocket::Error(int error) {
   BufferInput(false);
   Close();
   SetError(error);
+  SignalCloseEvent(this, error);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+AsyncSocksProxySocket::AsyncSocksProxySocket(Socket* socket,
+                                             const SocketAddress& proxy,
+                                             absl::string_view username,
+                                             const CryptString& password)
+    : BufferedReadAdapter(socket, 1024),
+      state_(SS_ERROR),
+      proxy_(proxy),
+      user_(username),
+      pass_(password) {}
+
+AsyncSocksProxySocket::~AsyncSocksProxySocket() = default;
+
+int AsyncSocksProxySocket::Connect(const SocketAddress& addr) {
+  int ret;
+  dest_ = addr;
+  state_ = SS_INIT;
+  BufferInput(true);
+  ret = BufferedReadAdapter::Connect(proxy_);
+  // TODO: Set state_ appropriately if Connect fails.
+  return ret;
+}
+
+SocketAddress AsyncSocksProxySocket::GetRemoteAddress() const {
+  return dest_;
+}
+
+int AsyncSocksProxySocket::Close() {
+  state_ = SS_ERROR;
+  dest_.Clear();
+  return BufferedReadAdapter::Close();
+}
+
+Socket::ConnState AsyncSocksProxySocket::GetState() const {
+  if (state_ < SS_TUNNEL) {
+    return CS_CONNECTING;
+  } else if (state_ == SS_TUNNEL) {
+    return CS_CONNECTED;
+  } else {
+    return CS_CLOSED;
+  }
+}
+
+void AsyncSocksProxySocket::OnConnectEvent(Socket* socket) {
+  SendHello();
+}
+
+void AsyncSocksProxySocket::ProcessInput(char* data, size_t* len) {
+  RTC_DCHECK(state_ < SS_TUNNEL);
+
+  ByteBufferReader response(
+      MakeArrayView(reinterpret_cast<uint8_t*>(data), *len));
+
+  if (state_ == SS_HELLO) {
+    uint8_t ver, method;
+    if (!response.ReadUInt8(&ver) || !response.ReadUInt8(&method))
+      return;
+
+    if (ver != 5) {
+      Error(0);
+      return;
+    }
+
+    if (method == 0) {
+      SendConnect();
+    } else if (method == 2) {
+      SendAuth();
+    } else {
+      Error(0);
+      return;
+    }
+  } else if (state_ == SS_AUTH) {
+    uint8_t ver, status;
+    if (!response.ReadUInt8(&ver) || !response.ReadUInt8(&status))
+      return;
+
+    if ((ver != 1) || (status != 0)) {
+      Error(SOCKET_EACCES);
+      return;
+    }
+
+    SendConnect();
+  } else if (state_ == SS_CONNECT) {
+    uint8_t ver, rep, rsv, atyp;
+    if (!response.ReadUInt8(&ver) || !response.ReadUInt8(&rep) ||
+        !response.ReadUInt8(&rsv) || !response.ReadUInt8(&atyp))
+      return;
+
+    if ((ver != 5) || (rep != 0)) {
+      Error(0);
+      return;
+    }
+
+    uint16_t port;
+    if (atyp == 1) {
+      uint32_t addr;
+      if (!response.ReadUInt32(&addr) || !response.ReadUInt16(&port))
+        return;
+      RTC_LOG(LS_VERBOSE) << "Bound on " << addr << ":" << port;
+    } else if (atyp == 3) {
+      uint8_t length;
+      std::string addr;
+      if (!response.ReadUInt8(&length) || !response.ReadString(&addr, length) ||
+          !response.ReadUInt16(&port))
+        return;
+      RTC_LOG(LS_VERBOSE) << "Bound on " << addr << ":" << port;
+    } else if (atyp == 4) {
+      std::string addr;
+      if (!response.ReadString(&addr, 16) || !response.ReadUInt16(&port))
+        return;
+      RTC_LOG(LS_VERBOSE) << "Bound on <IPV6>:" << port;
+    } else {
+      Error(0);
+      return;
+    }
+
+    state_ = SS_TUNNEL;
+  }
+
+  // Consume parsed data
+  *len = response.Length();
+  memmove(data, response.Data(), *len);
+
+  if (state_ != SS_TUNNEL)
+    return;
+
+  bool remainder = (*len > 0);
+  BufferInput(false);
+  SignalConnectEvent(this);
+
+  // FIX: if SignalConnect causes the socket to be destroyed, we are in trouble
+  if (remainder)
+    SignalReadEvent(this);  // TODO: signal this??
+}
+
+void AsyncSocksProxySocket::SendHello() {
+  ByteBufferWriter request;
+  request.WriteUInt8(5);  // Socks Version
+  if (user_.empty()) {
+    request.WriteUInt8(1);  // Authentication Mechanisms
+    request.WriteUInt8(0);  // No authentication
+  } else {
+    request.WriteUInt8(2);  // Authentication Mechanisms
+    request.WriteUInt8(0);  // No authentication
+    request.WriteUInt8(2);  // Username/Password
+  }
+  DirectSend(request.Data(), request.Length());
+  state_ = SS_HELLO;
+}
+
+void AsyncSocksProxySocket::SendAuth() {
+  ByteBufferWriterT<ZeroOnFreeBuffer<char>> request;
+  request.WriteUInt8(1);  // Negotiation Version
+  request.WriteUInt8(static_cast<uint8_t>(user_.size()));
+  request.WriteString(user_);  // Username
+  request.WriteUInt8(static_cast<uint8_t>(pass_.GetLength()));
+  size_t len = pass_.GetLength() + 1;
+  char* sensitive = new char[len];
+  pass_.CopyTo(sensitive, true);
+  request.WriteString(std::string(sensitive, pass_.GetLength()));  // Password
+  ExplicitZeroMemory(sensitive, len);
+  delete[] sensitive;
+  DirectSend(request.Data(), request.Length());
+  state_ = SS_AUTH;
+}
+
+void AsyncSocksProxySocket::SendConnect() {
+  ByteBufferWriter request;
+  request.WriteUInt8(5);  // Socks Version
+  request.WriteUInt8(1);  // CONNECT
+  request.WriteUInt8(0);  // Reserved
+  if (dest_.IsUnresolvedIP()) {
+    std::string hostname = dest_.hostname();
+    request.WriteUInt8(3);  // DOMAINNAME
+    request.WriteUInt8(static_cast<uint8_t>(hostname.size()));
+    request.WriteString(hostname);  // Destination Hostname
+  } else {
+    request.WriteUInt8(1);            // IPV4
+    request.WriteUInt32(dest_.ip());  // Destination IP
+  }
+  request.WriteUInt16(dest_.port());  // Destination Port
+  DirectSend(request.Data(), request.Length());
+  state_ = SS_CONNECT;
+}
+
+void AsyncSocksProxySocket::Error(int error) {
+  state_ = SS_ERROR;
+  BufferInput(false);
+  Close();
+  SetError(SOCKET_EACCES);
   SignalCloseEvent(this, error);
 }
 
