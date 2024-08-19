@@ -88,6 +88,22 @@ class ProxyServer : public sigslot::has_slots<> {
   std::vector<std::unique_ptr<ProxyBinding>> bindings_;
 };
 
+// SocksProxyServer is a simple extension of ProxyServer to implement SOCKS.
+class SocksProxyServer : public ProxyServer {
+ public:
+  SocksProxyServer(SocketFactory* int_factory,
+                   const SocketAddress& int_addr,
+                   SocketFactory* ext_factory,
+                   const SocketAddress& ext_ip)
+      : ProxyServer(int_factory, int_addr, ext_factory, ext_ip) {}
+
+  SocksProxyServer(const SocksProxyServer&) = delete;
+  SocksProxyServer& operator=(const SocksProxyServer&) = delete;
+
+ protected:
+  AsyncProxyServerSocket* WrapSocket(Socket* socket) override;
+};
+
 }  //  namespace webrtc
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
