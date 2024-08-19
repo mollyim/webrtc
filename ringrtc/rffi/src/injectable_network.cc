@@ -333,6 +333,8 @@ class InjectableNetworkImpl : public InjectableNetwork,
   rtc::AsyncPacketSocket* CreateClientTcpSocket(
       const rtc::SocketAddress& local_address,
       const rtc::SocketAddress& remote_address,
+      const ProxyInfo& proxy_info,
+      const std::string& user_agent,
       const rtc::PacketSocketTcpOptions& tcp_options) override {
     // TODO: Support TCP for TURN
     return nullptr;
