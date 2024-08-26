@@ -66,6 +66,21 @@ typedef struct {
   size_t servers_size;
 } RffiIceServers;
 
+enum RffiProxyType {
+  kRffiProxyTypeNone = 0,
+  kRffiProxyTypeHttps = 1,
+  kRffiProxyTypeSocks5 = 2,
+  kRffiProxyTypeUnknown = 3,
+};
+
+typedef struct {
+  RffiProxyType type;
+  const char* hostname_borrowed;
+  const char* username_borrowed;
+  const char* password_borrowed;
+  uint16_t port;
+} RffiProxyInfo;
+
 enum class RffiPeerConnectionKind : uint8_t {
   kDirect,
   kRelayed,
@@ -121,6 +136,7 @@ RUSTEXPORT webrtc::PeerConnectionInterface* Rust_createPeerConnection(
     const RffiAudioJitterBufferConfig* audio_jitter_buffer_config_borrowed,
     int32_t audio_rtcp_report_interval_ms,
     const RffiIceServers* ice_servers_borrowed,
+    const RffiProxyInfo* proxy_info_borrowed,
     webrtc::AudioTrackInterface* outgoing_audio_track_borrowed_rc,
     webrtc::VideoTrackInterface* outgoing_video_track_borrowed_rc);
 
