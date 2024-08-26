@@ -277,6 +277,7 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
     const RffiAudioJitterBufferConfig* audio_jitter_buffer_config_borrowed,
     int32_t audio_rtcp_report_interval_ms,
     const RffiIceServers* ice_servers_borrowed,
+    const RffiProxyInfo* proxy_info_borrowed,
     AudioTrackInterface* outgoing_audio_track_borrowed_rc,
     VideoTrackInterface* outgoing_video_track_borrowed_rc) {
   auto factory = factory_owner_borrowed_rc->peer_connection_factory();
@@ -316,6 +317,22 @@ RUSTEXPORT PeerConnectionInterface* Rust_createPeerConnection(
       config.servers.push_back(rtc_ice_server);
     }
   }
+
+  webrtc::ProxyInfo proxy_info;
+  webrtc::InsecureCryptStringImpl pass;
+  switch (proxy_info_borrowed->type) {
+    case kRffiProxyTypeNone: proxy_info.type = webrtc::PROXY_NONE; break;
+    case kRffiProxyTypeHttps: proxy_info.type = webrtc::PROXY_HTTPS; break;
+    case kRffiProxyTypeSocks5: proxy_info.type = webrtc::PROXY_SOCKS5; break;
+    default:
+      RTC_LOG(LS_ERROR) << "Unknown proxy type: " << proxy_info_borrowed->type;
+  }
+  proxy_info.address = SocketAddress(std::string(proxy_info_borrowed->hostname_borrowed),
+                                     proxy_info_borrowed->port);
+  proxy_info.username = std::string(proxy_info_borrowed->username_borrowed);
+  pass.password() = std::string(proxy_info_borrowed->password_borrowed);
+  proxy_info.password = CryptString(pass);
+  config.proxy_info = proxy_info;
 
   config.crypto_options = CryptoOptions{};
   if (observer_borrowed->enable_frame_encryption()) {
