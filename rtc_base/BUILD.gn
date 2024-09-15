@@ -1770,9 +1770,8 @@ rtc_library("http_common") {
     ":stringutils",
     ":zero_memory",
     "third_party/base64",
-  ]
-
-  absl_deps = [ "//third_party/abseil-cpp/absl/strings" ]
+    "//third_party/abseil-cpp/absl/strings",
+ ]
 }
 
 rtc_source_set("gtest_prod") {
