@@ -16,8 +16,10 @@
 #include "absl/strings/string_view.h"
 #include "api/array_view.h"
 #include "rtc_base/async_socket.h"
+#include "rtc_base/crypt_string.h"
+#include "rtc_base/http_common.h"
+
 namespace rtc {
-struct HttpAuthContext;
 class ByteBufferReader;
 class ByteBufferWriter;
 }  // namespace rtc
