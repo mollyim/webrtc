@@ -1300,6 +1300,7 @@ rtc_library("socket_adapters") {
     ":buffer",
     ":byte_buffer",
     ":checks",
+    ":crypt_string",
     ":logging",
     ":socket",
     ":socket_address",
@@ -1726,6 +1727,13 @@ rtc_library("ssl_adapter") {
   } else {
     configs += [ "..:external_ssl_library" ]
   }
+}
+
+rtc_library("crypt_string") {
+  sources = [
+    "crypt_string.cc",
+    "crypt_string.h",
+  ]
 }
 
 rtc_source_set("gtest_prod") {
