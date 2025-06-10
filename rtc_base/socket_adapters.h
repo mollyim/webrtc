@@ -18,6 +18,8 @@
 #include "rtc_base/async_socket.h"
 #include "rtc_base/socket.h"
 #include "rtc_base/socket_address.h"
+#include "rtc_base/crypt_string.h"
+#include "rtc_base/http_common.h"
 
 namespace webrtc {
 
