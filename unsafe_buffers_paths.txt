@@ -9,6 +9,7 @@
 # Directory-level exceptions, permanent
 -common_audio/third_party/
 -modules/third_party/
+-rtc_base/third_party/base64/
 -third_party/
 # RingRTC change to allow interop with Rust pointers
 -ringrtc
