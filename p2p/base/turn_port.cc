@@ -628,9 +628,9 @@ Connection* TurnPort::CreateConnection(const Candidate& remote_candidate,
   }
 
   // RingRTC change to prevent attempting relay connections to addresses that are not globally unique
-  if (webrtc::IPIsNotGloballyUnique(remote_candidate.address().ipaddr())) {
-    return nullptr;
-  }
+  //if (webrtc::IPIsNotGloballyUnique(remote_candidate.address().ipaddr())) {
+  //  return nullptr;
+  //}
 
   // A TURN port will have two candidates, STUN and TURN. STUN may not
   // present in all cases. If present stun candidate will be added first
