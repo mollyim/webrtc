@@ -646,6 +646,10 @@ void AsyncSocksProxySocket::SendConnect() {
     request.WriteUInt8(3);  // DOMAINNAME
     request.WriteUInt8(static_cast<uint8_t>(hostname.size()));
     request.WriteString(hostname);  // Destination Hostname
+  } else if (dest_.family() == AF_INET6) {
+    request.WriteUInt8(4);  // IPV6
+    const auto address = dest_.ipaddr().ipv6_address();
+    request.Write(std::span<const uint8_t>(address.s6_addr));
   } else {
     request.WriteUInt8(1);            // IPV4
     request.WriteUInt32(dest_.ip());  // Destination IP
